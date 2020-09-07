@@ -67,4 +67,5 @@ cb = fig.colorbar(im, cax=cbar_ax)
 fig.tight_layout()
 fig.savefig("heatmaps.png", bbox_inches='tight')
 #%%
-plt.show()
+fig.show()
+
