@@ -1,13 +1,11 @@
 import os.path
 import glob
-import matplotlib as mpl
 from multiprocessing import Pool
-from scipy import signal
 from analyze_stk import *
 
 #%%
 if __name__ == "__main__":
-    files = glob.glob("stks/*.mat")[24:25]
+    files = glob.glob("stks/*.mat")
     infos = np.zeros(len(files))
     lengths = [float(os.path.basename(os.path.splitext(filename)[0]).replace("_2","").replace("_1","")) for filename in files]
 #%%
@@ -44,30 +42,30 @@ if __name__ == "__main__":
         durations_avg[i] = np.average(results)
         durations_stdev[i] = np.std(results)
 #%%
+    # Blocked duration histograms
     # titles = [f"{length} cm" for length in unique_lengths]
     # multi_plot("hist", len(durations), list(durations.values()),
     #            main_title="Blocked durations histogram", titles=titles,
     #            xtitle="Blocked Duration (sec)", density=True)
 #%%
+    # Average duration as function of board length
     # plt.errorbar(unique_lengths, durations_avg, durations_stdev, fmt=".")
     # plt.title("Average blocked duration as function of board length")
     # plt.xlabel("Board Length (cm)")
     # plt.ylabel("Average duration (sec)")
     # plt.show()
 #%%
-    blocked = analysis_results[0][:, 0].astype("float")
-    blocked -= blocked.mean()
+    # Find correlations and peaks in correlations
     fig = plt.figure(figsize=(20, 5))
-    corrs = plt.acorr(blocked, maxlags=None, usevlines=True)
-    envelope = signal.hilbert(corrs[1])
-    # plt.xlim(10000,20000)
-    plt.xlim(0)
+    lags, values, peaks, peak_widths = autocorrelations(analysis_results[0])
     plt.ylim(-0.075, 0.075)
-    plt.plot(corrs[0], envelope)
+    # plt.xlim(0)
+    plt.xlim(22000, 23000)
     plt.show()
 # %%
-    xf = np.fft.fftfreq(len(corrs[1]))
-    fourier = np.fft.fft(corrs[1])
+    # Fourier transform of correlations graph
+    xf = np.fft.fftfreq(len(values))
+    fourier = np.fft.fft(values)
     plt.plot(xf, fourier)
     plt.xlim(-0.05, 0.05)
     plt.show()

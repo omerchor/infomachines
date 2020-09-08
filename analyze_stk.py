@@ -5,6 +5,7 @@ import scipy.io as sio
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import scipy.signal
 
 # %%
 CELL_WIDTH = 50     # Virtual cell width in pixels (should be barrier blocked size)
@@ -187,13 +188,61 @@ def analyze_first_passage(analysis_res):
     return np.array(experiment_lengths) / FPS, first_free_cells
 
 
-def correlations(analysis_res):
+def correlation_peaks(lags, values):
+    """Finds and plots peaks in data returned from correlation function.
+
+    Parameters
+    ----------
+    lags : np.ndarray
+        Array of lags of type 'int32'
+    values : np.ndarray
+        Array of correlation values of type 'float64'
+
+    Returns
+    -------
+    peak_indices : np.ndarray
+        An array containing indices of peak values
+    properties : dict
+        Dictionary returned from find_peaks that contains peaks' properties
     """
-    Finds correlations between times engine is blocked
+    # Only look for peaks in positive correlations - this line replaces negative values with zeros (only for analysis)
+    positive_corrs = np.clip(values, 0, None)
+    peak_indices, properties = scipy.signal.find_peaks(positive_corrs, prominence=0.02, width=0)
+
+    # Plot peaks
+    plt.plot(lags[peak_indices], values[peak_indices], "x")
+    # Plot peak heights
+    plt.vlines(x=lags[peak_indices], ymin=0,
+               ymax=values[peak_indices], color="C1")
+    # Plot peak widths
+    plt.hlines(y=properties['width_heights'], xmin=lags[np.floor(properties["left_ips"]).astype('int')],
+               xmax=lags[np.floor(properties["right_ips"]).astype('int')], color="C1")
+    return peak_indices, properties
+
+
+def autocorrelations(analysis_res):
+    """
+    Finds and plots autocorrelations in engine blocked/unblocked data.
+    Returns full correlation results (list of lags and list of correlation values for each lag), as well as list of
+    positive peaks and their widths
     """
     # Extract first column from results
-    blocked = analysis_res[:, 0]
-    cor = np.correlate(blocked, blocked, mode='same')
-    plt.acorr(cor)
-    plt.show()
-    return cor
+    blocked = analysis_res[:, 0].astype("float")
+    # Normalize data
+    blocked -= blocked.mean()
+
+    # Find correlations.
+    # Returns lists of:
+    # [lags (frames)] [correlation value] ...
+    corrs = plt.acorr(blocked, maxlags=None, usevlines=True)
+    lags = corrs[0]
+    values = corrs[1]
+
+    # Find peaks in autocorrelation results
+    peak_indices, properties = correlation_peaks(lags, values)
+
+    # Return only positive lags (acorr result is symmetrical)
+    positive_peak_indices = np.where(lags[peak_indices] >= 0)
+    peaks = lags[positive_peak_indices]
+    peak_widths = properties['widths'][positive_peak_indices]
+    return lags, values, peaks, peak_widths
