@@ -2,18 +2,27 @@ import os.path
 import glob
 from multiprocessing import Pool
 from analyze_stk import *
-
 #%%
+# Execute whole script from here
 if __name__ == "__main__":
-    files = glob.glob("stks/*.mat")
+# %%
+    files = glob.glob("stks/*.mat")[24:25]
     infos = np.zeros(len(files))
     lengths = [float(os.path.basename(os.path.splitext(filename)[0]).replace("_2","").replace("_1","")) for filename in files]
 #%%
     with Pool(8) as p:
         # Analyze the files
         analysis_results = p.map(parse_file, files)
+        # Find cell occupied probabilities in each file
         occupied_probabilities = p.map(get_probabilities, analysis_results)
-
+        # Analyze frame correlations in each file
+        # Result is list of [lags, values, peaks, peak_widths]
+        correlations = p.map(autocorrelations, analysis_results)
+#%%
+    peaks = [c[2] for c in correlations]
+    peak_distances = [np.diff(p) for p in peaks]
+    # average_distance =
+#%%
     # Plot blocked probabilities as function of board size
     blocked_probabilities = [probability[0] for probability in occupied_probabilities]
     plt.plot(lengths, blocked_probabilities, ".")
@@ -57,7 +66,7 @@ if __name__ == "__main__":
 #%%
     # Find correlations and peaks in correlations
     fig = plt.figure(figsize=(20, 5))
-    lags, values, peaks, peak_widths = autocorrelations(analysis_results[0])
+    lags, values, peaks, peak_widths = autocorrelations(analysis_results)
     plt.ylim(-0.075, 0.075)
     # plt.xlim(0)
     plt.xlim(22000, 23000)
@@ -69,3 +78,4 @@ if __name__ == "__main__":
     plt.plot(xf, fourier)
     plt.xlim(-0.05, 0.05)
     plt.show()
+# %%

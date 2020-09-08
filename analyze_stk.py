@@ -243,6 +243,7 @@ def autocorrelations(analysis_res):
 
     # Return only positive lags (acorr result is symmetrical)
     positive_peak_indices = np.where(lags[peak_indices] >= 0)
-    peaks = lags[positive_peak_indices]
+    # Get only positive peaks out of full peaks list
+    peaks = lags[peak_indices][positive_peak_indices]
     peak_widths = properties['widths'][positive_peak_indices]
     return lags, values, peaks, peak_widths
