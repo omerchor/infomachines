@@ -4,6 +4,7 @@ import scipy.io as sio
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import analyze_stk
 # %%
 IMAGE_RESOLUTION = np.array([350,290])
 CELLS_RATIO = 19
@@ -46,7 +47,9 @@ for filename in files:
     results.append(pixels)
 #%%
 # Create multiple figures for all results (two in a row - adds as many rows needed)
-fig, axs = plt.subplots(int(np.ceil(len(results) / 2)), 2, figsize=(10, 18))
+num_columns = 3
+fig, axs = plt.subplots(int(np.ceil(len(results) / num_columns)), num_columns,
+                        figsize=(12, 11))
 cbar_ax = fig.add_axes([1, 0.15, 0.05, 0.7])
 
 # Plot each result in its place
@@ -59,13 +62,15 @@ for i, item in enumerate(results):
     # Show the heatmap
     # vmax can be used to add a maximal value - the laser is sometimes detected in the
     # image, making the area near the moving wall appear significantly busier
-    im = axs[i // 2, i % 2].imshow(item, interpolation = 'gaussian', cmap='inferno', vmax=0.7)
-    axs[i // 2, i % 2].set_title("Number of hexbugs: " + str(i + 1))
+    im = axs[i // num_columns, i % num_columns].imshow(item, interpolation='gaussian',
+                                                       cmap='inferno', vmax=0.5,
+                                                       label=i+1)
+    axs[i // num_columns, i % num_columns].set_title("Number of hexbugs: " + str(i + 1))
     
 # Add colorbar
 cb = fig.colorbar(im, cax=cbar_ax)
+fig.suptitle("Heatmaps of hexbugs positions for different amounts of bugs", fontsize=16)
+fig.subplots_adjust(top=0.98)
 fig.tight_layout()
 fig.savefig("heatmaps.png", bbox_inches='tight')
-#%%
 fig.show()
-

@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import scipy.signal
+import lab
 
 # %%
 CELL_WIDTH = 50     # Virtual cell width in pixels (should be barrier blocked size)
@@ -95,26 +96,34 @@ def get_probabilities(analysis_res):
 
 def multi_plot(plot_method_name, num_plots, plot_args, num_columns=3,
                main_title=None, titles=None, xtitle=None, ytitle=None,
+               show=True, setp_kwargs=None, is_wide=False,
                **kwargs):
-    """
-    Draw many plots on same figure.
-    @param plot_method_name: name of the plotting function to call on each subfigure
-    @param num_plots: number of subplot to draw
-    @param plot_args: list of arguments to pass to each plot method
-    @param num_columns: number of columns to draw plot in
-    @param main_title: name of the whole figure
-    @param titles: list of titles for each subplot
-    @param xtitle: title for x-axis
-    @param ytitle: title for y-axis
-    @param kwargs: keyword args to pass to plotting function
+    """Draw many plots on same figure and save to file named main_title
+
+    Parameters
+    ----------
+    plot_method_name: name of the plotting function to call on each subfigure
+    num_plots: number of subplot to draw
+    plot_args: list of arguments to pass to each plot method
+    num_columns: number of columns to draw plot in
+    main_title: name of the whole figure
+    titles: list of titles for each subplot
+    xtitle: title for x-axis
+    ytitle: title for y-axis
+    setp_kwargs : dictionary of kwargs to set on all subplot objects
+    show : whether to show the plot (otherwise, user should call plt.show() manually)
+    is_wide : Whether subplots should be wide (default is square)
+    kwargs: keyword args to pass to plotting function
     """
     num_rows = int(np.ceil(num_plots / num_columns))
+    width = 8 * num_columns if is_wide else 4 * num_columns
     fig, axs = plt.subplots(num_rows, num_columns,
-                            figsize=[12, 4 * num_rows + 1],
+                            figsize=[width, 4 * num_rows + 1],
                             constrained_layout=True,
                             sharex=True)
     # Plot each result in its place
     for i, item in enumerate(plot_args):
+        print("Plotting", titles[i], "...")
         plot_func = getattr(axs[i // num_columns, i % num_columns], plot_method_name)
         plot_func(*item, **kwargs)
         if any(titles):
@@ -124,18 +133,22 @@ def multi_plot(plot_method_name, num_plots, plot_args, num_columns=3,
         if ytitle:
             axs[i // num_columns, i % num_columns].set_ylabel(ytitle)
     # fig.suptitle(main_title)
-    fig.subplots_adjust(top=0.85)
+    if setp_kwargs:
+        plt.setp(axs, **setp_kwargs)
+    fig.suptitle(main_title, fontsize=16)
     fig.tight_layout()
+    fig.subplots_adjust(top=0.95)
+    fig.savefig("heatmaps.png", bbox_inches='tight')
     if main_title:
         fig.savefig(f"{main_title}.png", bbox_inches='tight')
-    plt.show()
+    if show:
+        plt.show()
 
 
 def plot_probabilities(probabilities, titles):
     cells = [range(1, len(item) + 1) for item in probabilities]
     args = zip(cells, probabilities)
-    multi_plot("bar", len(probabilities), args,
-               main_title="Occupied probabilities", titles=titles)
+    multi_plot("bar", len(probabilities), args, main_title="Occupied probabilities", titles=titles)
     # fig, axs = plt.subplots(int(np.ceil(len(probabilities) / num_columns)), num_columns)
     #
     # # Plot each result in its place
@@ -245,5 +258,41 @@ def autocorrelations(analysis_res):
     positive_peak_indices = np.where(lags[peak_indices] >= 0)
     # Get only positive peaks out of full peaks list
     peaks = lags[peak_indices][positive_peak_indices]
+    peak_values = values[peak_indices][positive_peak_indices]
     peak_widths = properties['widths'][positive_peak_indices]
-    return lags, values, peaks, peak_widths
+    return lags, values, peaks, peak_values, peak_widths
+
+
+def first_decay_slope(lags, values, plot=False):
+    """Finds the slope of the decay of the first maximum in the autocorrelation
+    graph in a semilog plot
+
+    Parameters
+    ----------
+    lags : lags returned from autocorrelations
+    values : autocorrelation values
+    plot : bool
+        Whether the fit should be plotted
+
+    Returns
+    -------
+    The slope of the linear fit of the semilog plot
+    """
+    # Find first decay slope
+    # Return only positive lags (acorr result is symmetrical)
+    positive_indices = np.where(lags >= 0)
+    lags = lags[positive_indices]
+    values = values[positive_indices]
+    # Decay seems to become less reliable right before reaching zero, so taking all but
+    # the last two results
+    first_negative_index = np.where(values <= 0)[0].min() - 2
+
+    decay_frames = lags[:first_negative_index]
+    decay_values = np.log(values[:first_negative_index])
+    params, param_errs, reduced_chi_squared, p_value = lab.fit(lab.line, decay_frames, decay_values, None, params_guess=[0,0])
+    if plot:
+        lab.plot(lab.line, params, decay_frames, decay_values, None, fmt=".",
+                 title=f"y={params[0]:.2f}x+{params[1]:.2f}")
+        plt.show()
+    return params[0]
+
