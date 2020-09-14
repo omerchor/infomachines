@@ -30,39 +30,7 @@ if __name__ == "__main__":
 
     correlation_fits = [fourier_peak_fit(c[1], False, files[i], 2) for i, c in enumerate(correlations)]
 #%%
-    fitted_lengths = []
-    centers = []
-    centers_errs = []
-    widths = []
-    widths_errs = []
-    for i, f in enumerate(correlation_fits):
-        params, param_errs = f
-        if params is None:
-            continue
-        fitted_lengths.append(lengths[i])
-        centers.append(params[1])
-        centers_errs.append(param_errs[1])
-        widths.append(params[2])
-        widths_errs.append(param_errs[2])
-    plt.errorbar(fitted_lengths, centers, centers_errs, fmt=".")
-    plt.title("Gaussian center as function of length")
-    plt.xlabel(xtitle)
-    plt.ylabel("Gaussian center frequency (Hz)")
-    plt.savefig("First_peak_center.png")
-    plt.show()
-
-    plt.errorbar(fitted_lengths, widths, widths_errs, fmt=".")
-    plt.title("Gaussian width as function of length")
-    plt.xlabel(xtitle)
-    plt.ylabel("Gaussian widths (Hz)")
-    plt.savefig("peak_width.png")
-    plt.show()
-#%%
-#     # plt.plot(lengths, slopes, ".")
-#     # plt.title("Autocorrelations first decay slope (semilog) as function of board size")
-#     # plt.xlabel("Board length (cm)")
-#     # plt.ylabel("Decay semilog slope")
-#     # plt.show()
+    correlation_fit_trends(correlation_fits, lengths, xtitle)
 #%%
     # Plot blocked probabilities as function of board size
     blocked_probabilities = [probability[0] for probability in occupied_probabilities]
@@ -73,24 +41,7 @@ if __name__ == "__main__":
     plt.savefig("blocked_probabilities.png", bbox_inches='tight')
     plt.show()
 #%%
-    # Merge results that belong to the same board size (multiple files)
-    unique_lengths = np.unique(lengths)
-    durations = {}
-    durations_avg = np.zeros(len(unique_lengths))
-    durations_stdev = np.zeros(len(unique_lengths))
-
-    for i, length in enumerate(unique_lengths):
-        # Find indices of length in original list
-        indices = np.where(lengths == length)[0]
-        results = []
-        for index in indices:
-            experiment_durations, _ = analyze_first_passage(analysis_results[index])
-            results.extend(experiment_durations)
-
-        # Put it in a list for unpacking by multi_plot
-        durations[length] = [np.array(results)]
-        durations_avg[i] = np.average(results)
-        durations_stdev[i] = np.std(results)
+    unique_lengths, durations, durations_avg, durations_stdev = first_passages(analysis_results, lengths)
 #%%
     # Blocked duration histograms
     titles = [f"{length} hexbugs" for length in unique_lengths]
