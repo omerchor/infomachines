@@ -49,7 +49,7 @@ def group_by_frame(stk):
         max_x = max(max_x, new_x)
         # Add the x field to the current list
         current.append(new_x)
-    return groups, min_x, max_x
+    return groups, min_x, max_x, new_frame
 
 
 def analyze_frame(data, lower_x_boundary):
@@ -59,7 +59,7 @@ def analyze_frame(data, lower_x_boundary):
     return np.unique((data - lower_x_boundary) // CELL_WIDTH).astype('int')
 
 
-def analyze_positions(frames, boundaries):
+def analyze_positions(frames, boundaries, num_frames):
     """
     Extracts position distribution from frames dict
     Returns a list of cell occupations (boolean - is occupied or not) for each frame
@@ -67,7 +67,7 @@ def analyze_positions(frames, boundaries):
     # Calculate number of cells for analysis and prepare results matrix
     num_of_cells = np.ceil((boundaries[1] - boundaries[0]) / CELL_WIDTH).astype('int')
     
-    results = np.zeros((len(frames), num_of_cells), dtype=bool)
+    results = np.zeros((num_frames, num_of_cells), dtype=bool)
     for frame_num, frame_data in frames.items():
         occupied_indices = analyze_frame(frame_data, boundaries[0])
         results[frame_num - 1][occupied_indices] = True
@@ -82,9 +82,9 @@ def parse_file(filename):
     """
     t = time.time()
     stk = parse_stk(filename)
-    frames, min_x, max_x = group_by_frame(stk)
+    frames, min_x, max_x, num_frames = group_by_frame(stk)
     boundaries = (min_x, max_x)
-    res = analyze_positions(frames, boundaries)
+    res = analyze_positions(frames, boundaries, num_frames)
     print(f'{filename}:\telapsed {time.time() - t:.2f} seconds')
     return res
 

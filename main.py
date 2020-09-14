@@ -6,24 +6,26 @@ from analyze_stk import *
 # Execute whole script from here
 if __name__ == "__main__":
 # %%
-    files = glob.glob("stks/*.mat")
+    #  files = glob.glob("stks/*.mat")
+    files = glob.glob("num_hexbugs_stks/*.mat")
     infos = np.zeros(len(files))
     lengths = [float(os.path.basename(os.path.splitext(filename)[0]).replace("_2", "").replace("_1", "")) for filename in files]
 #%%
-    with Pool(8) as p:
-        # Analyze the files
-        analysis_results = p.map(parse_file, files)
-        # Find cell occupied probabilities in each file
-        occupied_probabilities = p.map(get_probabilities, analysis_results)
-        # Analyze frame correlations in each file
-        # Result is list of [lags, values, peaks, peak_values, peak_widths]
-        correlations = p.map(autocorrelations, analysis_results)
-        #%%
     # with Pool(8) as p:
-    correlation_fits = [fourier_peak_fit(c[1], False, files[i], 3) for i, c in enumerate(correlations)]
+    #     # Analyze the files
+    #     analysis_results = p.map(parse_file, files)
+    #     # Find cell occupied probabilities in each file
+    #     occupied_probabilities = p.map(get_probabilities, analysis_results)
+    #     # Analyze frame correlations in each file
+    #     # Result is list of [lags, values, peaks, peak_values, peak_widths]
+    #     correlations = p.map(autocorrelations, analysis_results)
+    analysis_results = [parse_file(f) for f in files]
+    occupied_probabilities = [get_probabilities(a) for a in analysis_results]
+    correlations = [autocorrelations(a) for a in analysis_results]
 #%%
-        # Fit the first peak of each autocorrelation graph to a Gaussian
-        #correlation_fits = [fourier_peak_fit(v, True, str(lengths[i])) for i, v in enumerate(values)]
+    # Fit the first peak of each autocorrelation graph to a Gaussian
+
+    correlation_fits = [fourier_peak_fit(c[1], False, files[i], 3) for i, c in enumerate(correlations)]
 #%%
     fitted_lengths = []
     centers = []
@@ -52,7 +54,7 @@ if __name__ == "__main__":
     plt.show()
 #%%
     # plt.plot(lengths, slopes, ".")
-    # plt.title("Autocorrelations decay slope (semilog) as function of board size")
+    # plt.title("Autocorrelations first decay slope (semilog) as function of board size")
     # plt.xlabel("Board length (cm)")
     # plt.ylabel("Decay semilog slope")
     # plt.show()
@@ -91,13 +93,14 @@ if __name__ == "__main__":
     # plt.show()
 #%%
     # Plot blocked probabilities as function of board size
-    # blocked_probabilities = [probability[0] for probability in occupied_probabilities]
-    # plt.plot(lengths, blocked_probabilities, ".")
-    # plt.title("Blocked probability as function of board length")
+    blocked_probabilities = [probability[0] for probability in occupied_probabilities]
+    plt.plot(lengths, blocked_probabilities, ".")
+    plt.title("Blocked probability as function of board length")
     # plt.xlabel("Board length (cm)")
-    # plt.ylabel("Occupied probability")
-    # plt.savefig("blocked_probabilities.png", bbox_inches='tight')
-    # plt.show()
+    plt.xlabel("Number of hexbugs")
+    plt.ylabel("Occupied probability")
+    plt.savefig("blocked_probabilities.png", bbox_inches='tight')
+    plt.show()
 #%%
     # Merge results that belong to the same board size (multiple files)
     unique_lengths = np.unique(lengths)
@@ -123,25 +126,10 @@ if __name__ == "__main__":
     # multi_plot("hist", len(durations), list(durations.values()),
     #            main_title="Blocked durations histogram", titles=titles,
     #            xtitle="Blocked Duration (sec)", density=True)
-#%%
-    # Average duration as function of board length
-    # plt.errorbar(unique_lengths, durations_avg, durations_stdev, fmt=".")
-    # plt.title("Average blocked duration as function of board length")
-    # plt.xlabel("Board Length (cm)")
-    # plt.ylabel("Average duration (sec)")
-    # plt.show()
-#%%
-    # Find correlations and peaks in correlations
-    fig = plt.figure(figsize=(30, 5))
-    lags, values, peaks, peak_values, peak_widths = autocorrelations(analysis_results[0])
-    # plt.ylim(-0.075, 0.075)
-    plt.xlim(0, 150)
-    plt.title("Correlations for " + str(lengths[0]) + "cm")
-    plt.xlabel("Frame num")
-    plt.ylabel("Autocorrelation (logscale)")
-    # plt.semilogy()
-    plt.show()
-#%%
-    # first_decay_slope(lags, values, True)
 # %%
-    fourier_peak_fit(values, True)
+#   # Average duration as function of board length
+    plt.errorbar(unique_lengths, durations_avg, durations_stdev, fmt=".")
+    plt.title("Average blocked duration as function of board length")
+    plt.xlabel("Board Length (cm)")
+    plt.ylabel("Average duration (sec)")
+    plt.show()
