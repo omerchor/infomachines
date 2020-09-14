@@ -85,11 +85,14 @@ def calc_chi_reduced_and_p_value(chi_squared, dof):
 def save_table(func, name, header, rows):
     filename = '{}_{}.csv'.format(func.__name__, name)
     filename = "".join(x for x in filename if x.isalnum() or x in "._-")
-    with open(filename, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(header)
-        for row in rows:
-            writer.writerow(row)
+    try:
+        with open(filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(header)
+            for row in rows:
+                writer.writerow(row)
+    except PermissionError:
+        print(f"Can't save fit results for {name} to file")
 
 
 def print_fit(func, params, param_errs, reduced_chi_squared, p_value):

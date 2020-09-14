@@ -189,7 +189,10 @@ def analyze_first_passage(analysis_res):
             if current_duration > 2:
                 experiment_lengths.append(current_duration)
                 # Add index of first nonzero cell (non occupied) to list
-                first_free_cells.append(np.min(analysis_res[current_frame].nonzero()))
+                free = np.flatnonzero(analysis_res[current_frame])
+                if len(free) > 0:
+                    first_free = np.min(free)
+                    first_free_cells.append(first_free)
             # For debugging: analyze short frames to see what wen wrong
             # elif current_duration != 0:
             #     short_frames.append(i)
@@ -251,19 +254,20 @@ def autocorrelations(analysis_res):
     lags = corrs[0]
     values = corrs[1]
 
-    # Find peaks in autocorrelation results
-    peak_indices, properties = correlation_peaks(lags, values)
+    # # Find peaks in autocorrelation results
+    # peak_indices, properties = correlation_peaks(lags, values)
+    #
+    # # Return only positive lags (acorr result is symmetrical)
+    # positive_peak_indices = np.where(lags[peak_indices] >= 0)
+    # # Get only positive peaks out of full peaks list
+    # peaks = lags[peak_indices][positive_peak_indices]
+    # peak_values = values[peak_indices][positive_peak_indices]
+    # peak_widths = properties['widths'][positive_peak_indices]
+    return lags, values#, peaks, peak_values, peak_widths
 
-    # Return only positive lags (acorr result is symmetrical)
-    positive_peak_indices = np.where(lags[peak_indices] >= 0)
-    # Get only positive peaks out of full peaks list
-    peaks = lags[peak_indices][positive_peak_indices]
-    peak_values = values[peak_indices][positive_peak_indices]
-    peak_widths = properties['widths'][positive_peak_indices]
-    return lags, values, peaks, peak_values, peak_widths
 
-
-def fourier_peak_fit(data, should_plot=False, title=None, prominence=2):
+def fourier_peak_fit(data, should_plot=False, title=None, prominence=2,
+                     rel_height=0.5, smoothing_window_size=301):
     """Calculates Fourier transform of data. Smooths and finds first peak, fits it to a gaussian
     and returns fit parameters and their errors.
 
@@ -288,19 +292,29 @@ def fourier_peak_fit(data, should_plot=False, title=None, prominence=2):
     xf = xf[indices_to_keep]
     fourier = fourier[indices_to_keep]
 
-    envelope = scipy.signal.savgol_filter(np.abs(fourier), 301, 1)
-    env_peaks, properties = scipy.signal.find_peaks(envelope, prominence=prominence,
-                                                    width=0, rel_height=1)
+    env_peaks = []
+    while not any(env_peaks):
+        envelope = scipy.signal.savgol_filter(np.abs(fourier), smoothing_window_size, 1)
+        env_peaks, properties = scipy.signal.find_peaks(envelope, prominence=prominence,
+                                                        width=0, rel_height=rel_height, distance=10000)
+        # Maybe data is very fuzzy. Try smoothing it using a bigger window size
+        smoothing_window_size += 100
+        # Prevent an infinite loop by limiting the smooth amount
+        if smoothing_window_size >= 1000:
+            break
+
+    plt.clf()
+
     if len(env_peaks) == 0:
-        plt.clf()
-        plt.plot(xf, envelope, label="Rolling average")
-        plt.xlim(0, 1)
-        if title:
-            plt.title(f"No peaks found in {title}")
-            plt.savefig(f"{title}.png")
-        else:
-            plt.title("No peaks found here")
-        plt.show()
+        if should_plot:
+            plt.plot(xf, envelope, label=f"Rolling average (window size {smoothing_window_size - 100})")
+            plt.xlim(0, 1)
+            if title:
+                plt.title(f"No peaks found in {title}")
+                plt.savefig(f"{title}.png")
+            else:
+                plt.title("No peaks found here")
+            plt.show()
         return None, None
 
     width = [xf[properties["right_ips"].astype("int")] - xf[properties["left_ips"].astype("int")]][0][0]
@@ -313,13 +327,15 @@ def fourier_peak_fit(data, should_plot=False, title=None, prominence=2):
                                        None,
                                        params_guess=(properties["width_heights"][0], xf[env_peaks][0], width / 2))
 
-    plt.plot(xf, envelope, label="Rolling average")
+    plt.plot(xf, envelope, label=f"Rolling average (window size {smoothing_window_size - 100})")
     plt.plot(xf[env_peaks], envelope[env_peaks], "x", label="Peaks")
-    plt.xlim(0, 0.75)
+    plt.xlim(0, 1.5)
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Autocorrelations Fourier transform")
     plt.vlines(x=xf[env_peaks], ymin=envelope[env_peaks] - properties["prominences"],
                ymax=envelope[env_peaks], color="C1")
+    harmonies = np.array([2, 3, 4]) * xf[env_peaks][0]
+    plt.vlines(x=harmonies, ymin=0, ymax=envelope[env_peaks][0], color="grey", alpha=0.5)
     plt.hlines(y=properties["width_heights"], xmin=xf[properties["left_ips"].astype("int")],
                xmax=xf[properties["right_ips"].astype("int")], color="C1")
     fit_range = xf[properties["left_ips"].astype("int")[0]:properties["right_ips"].astype("int")[0]]
@@ -331,7 +347,6 @@ def fourier_peak_fit(data, should_plot=False, title=None, prominence=2):
         plt.savefig(f"{title}.png")
     if should_plot:
         plt.show()
-
     return params, param_errs
 
 
