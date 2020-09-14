@@ -23,6 +23,12 @@ def line(B, x):
     """
     return B[0]*x + B[1]
 
+
+def gaussian(B, x):
+    return B[0] * np.exp(-np.divide((x - B[1]) ** 2,
+                                    2 * (B[2] ** 2)))
+
+
 def statistical_error(errors, data):
     """
     Adds statistical error to an existing (systematic)
@@ -108,7 +114,6 @@ def odr(func, x_data, y_data, y_errs, params_guess=None, delta_dof=0, x_errs=Non
     myodr = scipy.odr.ODR(data, model, beta0=params_guess, maxit=1000)
     fit = myodr.run()
     return fit
-    # fit.pprint()
 
 
 def fit(func, x_data, y_data, y_errs, params_guess=None, delta_dof=0, x_errs=None):

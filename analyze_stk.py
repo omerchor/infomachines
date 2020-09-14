@@ -263,6 +263,78 @@ def autocorrelations(analysis_res):
     return lags, values, peaks, peak_values, peak_widths
 
 
+def fourier_peak_fit(data, should_plot=False, title=None, prominence=2):
+    """Calculates Fourier transform of data. Smooths and finds first peak, fits it to a gaussian
+    and returns fit parameters and their errors.
+
+    Parameters
+    ----------
+    data : data to operate on
+    should_plot : whether results should be plotted
+
+    Returns
+    -------
+    Fit parameters (to pass to lab.gaussian) and a list of their errors
+    """
+    if title:
+        print(f"Fitting peaks for {title} peaks...")
+
+    # Fourier transform of correlations graph. Sampling rate is 1/frames per second
+    xf = np.fft.fftshift(np.fft.fftfreq(len(data), d=1/FPS))
+    fourier = np.fft.fftshift(np.abs(np.fft.fft(data)))
+
+    # Trim frequencies below zero
+    indices_to_keep = np.where(xf >= 0)
+    xf = xf[indices_to_keep]
+    fourier = fourier[indices_to_keep]
+
+    envelope = scipy.signal.savgol_filter(np.abs(fourier), 301, 1)
+    env_peaks, properties = scipy.signal.find_peaks(envelope, prominence=prominence,
+                                                    width=0, rel_height=1)
+    if len(env_peaks) == 0:
+        plt.clf()
+        plt.plot(xf, envelope, label="Rolling average")
+        plt.xlim(0, 1)
+        if title:
+            plt.title(f"No peaks found in {title}")
+            plt.savefig(f"{title}.png")
+        else:
+            plt.title("No peaks found here")
+        plt.show()
+        return None, None
+
+    width = [xf[properties["right_ips"].astype("int")] - xf[properties["left_ips"].astype("int")]][0][0]
+    params, param_errs, _, _ = lab.fit(lab.gaussian,
+                                       xf[properties["left_ips"].astype("int")[0]:properties["right_ips"].astype("int")[
+                                           0]],
+                                       envelope[
+                                       properties["left_ips"].astype("int")[0]:properties["right_ips"].astype("int")[
+                                           0]],
+                                       None,
+                                       params_guess=(properties["width_heights"][0], xf[env_peaks][0], width / 2))
+
+    plt.plot(xf, envelope, label="Rolling average")
+    plt.plot(xf[env_peaks], envelope[env_peaks], "x", label="Peaks")
+    plt.xlim(0, 0.75)
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("Autocorrelations Fourier transform")
+    plt.vlines(x=xf[env_peaks], ymin=envelope[env_peaks] - properties["prominences"],
+               ymax=envelope[env_peaks], color="C1")
+    plt.hlines(y=properties["width_heights"], xmin=xf[properties["left_ips"].astype("int")],
+               xmax=xf[properties["right_ips"].astype("int")], color="C1")
+    fit_range = xf[properties["left_ips"].astype("int")[0]:properties["right_ips"].astype("int")[0]]
+    fit_curve = [lab.gaussian(params, x) for x in fit_range]
+    plt.plot(fit_range, fit_curve, "-", label="Gaussian fit")
+    plt.legend()
+    if title:
+        plt.title(title)
+        plt.savefig(f"{title}.png")
+    if should_plot:
+        plt.show()
+
+    return params, param_errs
+
+
 def first_decay_slope(lags, values, plot=False):
     """Finds the slope of the decay of the first maximum in the autocorrelation
     graph in a semilog plot

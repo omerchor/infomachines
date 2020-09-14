@@ -2,25 +2,54 @@ import os.path
 import glob
 from multiprocessing import Pool
 from analyze_stk import *
-import scipy.signal
 #%%
 # Execute whole script from here
 if __name__ == "__main__":
 # %%
-    files = glob.glob("stks/*.mat")[24:25]
+    files = glob.glob("stks/*.mat")
     infos = np.zeros(len(files))
     lengths = [float(os.path.basename(os.path.splitext(filename)[0]).replace("_2", "").replace("_1", "")) for filename in files]
 #%%
-    with Pool(1) as p:
+    with Pool(8) as p:
         # Analyze the files
         analysis_results = p.map(parse_file, files)
         # Find cell occupied probabilities in each file
         occupied_probabilities = p.map(get_probabilities, analysis_results)
         # Analyze frame correlations in each file
         # Result is list of [lags, values, peaks, peak_values, peak_widths]
-        # correlations = p.map(autocorrelations, analysis_results)
-        # slope_params = [(c[0], c[1]) for c in correlations]
-        # slopes = p.starmap(first_decay_slope, slope_params)
+        correlations = p.map(autocorrelations, analysis_results)
+        #%%
+    # with Pool(8) as p:
+    correlation_fits = [fourier_peak_fit(c[1], False, files[i], 3) for i, c in enumerate(correlations)]
+#%%
+        # Fit the first peak of each autocorrelation graph to a Gaussian
+        #correlation_fits = [fourier_peak_fit(v, True, str(lengths[i])) for i, v in enumerate(values)]
+#%%
+    fitted_lengths = []
+    centers = []
+    centers_errs = []
+    widths = []
+    widths_errs = []
+    for i, f in enumerate(correlation_fits):
+        params, param_errs = f
+        if params is None:
+            continue
+        fitted_lengths.append(lengths[i])
+        centers.append(params[1])
+        centers_errs.append(param_errs[1])
+        widths.append(params[2])
+        widths_errs.append(param_errs[2])
+    plt.errorbar(fitted_lengths, centers, centers_errs, fmt=".")
+    plt.title("Gaussian center as function of length")
+    plt.xlabel("Board length (cm)")
+    plt.ylabel("Gaussian center frequency (Hz)")
+    plt.show()
+
+    plt.errorbar(fitted_lengths, widths, widths_errs, fmt=".")
+    plt.title("Gaussian width as function of length")
+    plt.xlabel("Board length (cm)")
+    plt.ylabel("Gaussian widths (Hz)")
+    plt.show()
 #%%
     # plt.plot(lengths, slopes, ".")
     # plt.title("Autocorrelations decay slope (semilog) as function of board size")
@@ -115,21 +144,4 @@ if __name__ == "__main__":
 #%%
     # first_decay_slope(lags, values, True)
 # %%
-    # Fourier transform of correlations graph. Sampling rate is 1/frames per second
-    xf = np.fft.fftshift(np.fft.fftfreq(len(values), d=1/FPS))
-    fourier = np.fft.fftshift(np.abs(np.fft.fft(values)))
-# %%
-    # envelope = scipy.signal.hilbert(np.abs(fourier))
-    envelope = scipy.signal.savgol_filter(np.abs(fourier), 401, 1)
-    env_peaks, properties = scipy.signal.find_peaks(envelope, prominence=1)
-    plt.plot(xf, fourier)
-    plt.plot(xf, envelope)
-    plt.plot(xf[env_peaks], envelope[env_peaks], "x")
-    plt.xlim(0, 1.75)
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Autocorrelations Fourier transform")
-    plt.title("Fourier transform of autocorrelations plot for " + str(lengths[0]) + "cm")
-    plt.show()
-    diffs = np.diff(xf[env_peaks])
-    # print(diffs.mean(), diffs.std())
-    # %%
+    fourier_peak_fit(values, True)
