@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
+import os
 
 import scipy.io as sio
 import numpy as np
@@ -103,14 +104,26 @@ def get_probabilities(analysis_res):
 
     Returns
     -------
-    List of p0, p1, ... pN - probabilities of each case as explained above
+    normalized_counts : list
+        List of p0, p1, ... pN - probabilities of each case as explained above
+    cumulative_count : dict
+        Dictionary of non-normalized cumulative counts of each first occupied cell
+        indices
     """
     # Find indices of first occupied (True value which is the maximum value for a binary variable)
     # cell in each frame
     first_occupied = np.argmax(analysis_res, axis=1)
-    _, counts = np.unique(first_occupied, return_counts=True)
-    # Return normalized counts of each cell being the first occupied one
-    return counts / first_occupied.size
+    unique_vals, counts = np.unique(first_occupied, return_counts=True)
+
+    # Normalized counts of each cell being the first occupied one
+    normalized_counts = counts / first_occupied.size
+
+    # Cumulative counts of each value in movie
+    cumulative_count = {}
+    for value in unique_vals:
+        cumulative_count[value] = np.cumsum(first_occupied == value)
+
+    return normalized_counts, cumulative_count
 
 
 def multi_plot(plot_method_name, num_plots, plot_args, num_columns=3,
@@ -454,7 +467,7 @@ def information(occupied_probabilities):
     return - np.sum(occupied_probabilities * np.log(occupied_probabilities))
 
 
-def plot_information(controlled_variable, infos, xtitle):
+def plot_information(controlled_variable, infos, xtitle, groups, group_sizes):
     """Plots information as function of a controlled variable
 
     Parameters
@@ -463,16 +476,24 @@ def plot_information(controlled_variable, infos, xtitle):
     infos : list of information for each value in controlled_variable
     xtitle : Name of the controlled variable to be shown on the plot
     """
-    plt.plot(controlled_variable, infos, ".")
+    if not groups:
+        plt.plot(controlled_variable, infos, ".")
+    else:
+        for i, group in enumerate(groups):
+            previous_group = group_sizes[i - 1] if i >= 1 else 0
+            plt.plot(controlled_variable[previous_group:previous_group + group_sizes[i]],
+                     infos[previous_group:previous_group + group_sizes[i]], ".",
+                     label=group)
+        plt.legend()
     plt.xlabel(xtitle)
     plt.ylabel("Information")
     plt.title(f"Information as function of {xtitle}")
-    plt.savefig("info_to_size.png")
+    plt.savefig(f"info_to_{xtitle}.png")
     plt.show()
 
 
 def plot_probabilities(controlled_variable, probabilities, xtitle,
-                       show_p0=False):
+                       show_p0=True):
     """ Plots probabilities for first cell being blocked, first free but second blocked
     etc. as function of controlled variable. See plot_information for full documentation
 
@@ -500,5 +521,32 @@ def plot_probabilities(controlled_variable, probabilities, xtitle,
     plt.title("Probabilities of amount of first consecutive free cells")
     plt.ylabel("Probability")
     plt.xlabel(xtitle)
-    plt.savefig("Probabilities_to_sizes.png")
+    plt.savefig(f"Probabilities_to_{xtitle}.png")
+    plt.show()
+
+
+def plot_cumulative_probabilities(controlled_variable, cumulative_counts,
+                                  show_p0=True):
+    """Plots the cumulative probability of each case as function of time
+
+    Parameters
+    ----------
+    cumulative_counts
+    """
+    for key, cumulative_counts in cumulative_counts.items():
+        if not show_p0 and key == 0:
+            continue
+        num_frames = len(cumulative_counts)
+        times = np.linspace(0, num_frames / FPS, num_frames)
+        probabilities = [count / (frame_index + 1) for frame_index, count in enumerate(cumulative_counts)]
+        plt.plot(times, probabilities, label=f"p{key}")
+    plt.legend()
+    plt.title(f"Cumulative probabilities for {controlled_variable}")
+    plt.ylabel("Probability")
+    plt.xlabel("Time (sec)")
+    path = os.path.join("cumulative", f"{str(controlled_variable)}.png")
+    # Don't override existing
+    if os.path.isfile(path):
+        path = os.path.join("cumulative", f"{str(controlled_variable)}_2.png")
+    plt.savefig(path)
     plt.show()
