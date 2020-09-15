@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import time
 import scipy.signal
 import lab
+import collections
+import pandas
 
 # %%
 CELL_WIDTH = 50     # Virtual cell width in pixels (should be barrier blocked size)
@@ -90,8 +92,25 @@ def parse_file(filename):
 
 
 def get_probabilities(analysis_res):
-    # Sum over columns and divide by number of rows (frames)
-    return analysis_res.sum(axis=0) / analysis_res.shape[0]
+    """Calculate the probabilities of the first cell being blocked,
+    first free but second blocked, first and second blocked but third
+    free, etc.
+
+    Parameters
+    ----------
+    analysis_res : list of lists of booleans returned from parse_file indicating blocked positions in
+                    each frame
+
+    Returns
+    -------
+    List of p0, p1, ... pN - probabilities of each case as explained above
+    """
+    # Find indices of first occupied (True value which is the maximum value for a binary variable)
+    # cell in each frame
+    first_occupied = np.argmax(analysis_res, axis=1)
+    _, counts = np.unique(first_occupied, return_counts=True)
+    # Return normalized counts of each cell being the first occupied one
+    return counts / first_occupied.size
 
 
 def multi_plot(plot_method_name, num_plots, plot_args, num_columns=3,
@@ -145,21 +164,6 @@ def multi_plot(plot_method_name, num_plots, plot_args, num_columns=3,
         plt.show()
 
 
-def plot_probabilities(probabilities, titles):
-    cells = [range(1, len(item) + 1) for item in probabilities]
-    args = zip(cells, probabilities)
-    multi_plot("bar", len(probabilities), args, main_title="Occupied probabilities", titles=titles)
-    # fig, axs = plt.subplots(int(np.ceil(len(probabilities) / num_columns)), num_columns)
-    #
-    # # Plot each result in its place
-    # for i, item in enumerate(probabilities):
-    #     p = axs[i // num_columns, i % num_columns].bar(range(1, len(item) + 1), item)
-    #     axs[i // num_columns, i % num_columns].set_title("Length: " + str(titles[i]))
-    # fig.tight_layout()
-    # plt.title("Occupied probabilities")
-    # plt.show()
-
-
 def analyze_first_passage(analysis_res):
     """
     Finds consecutive frames in analysis_res which are blocked.
@@ -171,8 +175,8 @@ def analyze_first_passage(analysis_res):
     # Amount of frames it took the bugs between filling the first cell until
     # freeing it
     experiment_lengths = []
-    # The index of the last free cell (how far could the barrier have been moved)
-    first_free_cells = []
+    # The index of the first occupied cell (how far could the barrier have been moved)
+    first_occupied_cells = []
     # short_frames = []
 
     current_duration = 0
@@ -189,10 +193,10 @@ def analyze_first_passage(analysis_res):
             if current_duration > 2:
                 experiment_lengths.append(current_duration)
                 # Add index of first nonzero cell (non occupied) to list
-                free = np.flatnonzero(analysis_res[current_frame])
-                if len(free) > 0:
-                    first_free = np.min(free)
-                    first_free_cells.append(first_free)
+                occupied = np.flatnonzero(analysis_res[current_frame])
+                if len(occupied) > 0:
+                    first_occupied = np.min(occupied)
+                    first_occupied_cells.append(first_occupied)
             # For debugging: analyze short frames to see what wen wrong
             # elif current_duration != 0:
             #     short_frames.append(i)
@@ -201,7 +205,7 @@ def analyze_first_passage(analysis_res):
             current_duration = 0
         current_frame += 1
 
-    return np.array(experiment_lengths) / FPS, first_free_cells
+    return np.array(experiment_lengths) / FPS, first_occupied_cells
 
 
 def correlation_peaks(lags, values):
@@ -434,3 +438,67 @@ def first_passages(analysis_results, lengths):
         durations_avg[i] = np.average(results)
         durations_stdev[i] = np.std(results)
     return unique_lengths, durations, durations_avg, durations_stdev
+
+
+def information(occupied_probabilities):
+    """Calculates the information contained in a list of probabilities
+
+    Parameters
+    ----------
+    occupied_probabilities : The probability of each cell being the first occupied
+
+    Returns
+    -------
+    The sum of p*ln(p) for probabilities in the input list
+    """
+    return - np.sum(occupied_probabilities * np.log(occupied_probabilities))
+
+
+def plot_information(controlled_variable, infos, xtitle):
+    """Plots information as function of a controlled variable
+
+    Parameters
+    ----------
+    controlled_variable : List of values of the variable being controlled in the experiment
+    infos : list of information for each value in controlled_variable
+    xtitle : Name of the controlled variable to be shown on the plot
+    """
+    plt.plot(controlled_variable, infos, ".")
+    plt.xlabel(xtitle)
+    plt.ylabel("Information")
+    plt.title(f"Information as function of {xtitle}")
+    plt.savefig("info_to_size.png")
+    plt.show()
+
+
+def plot_probabilities(controlled_variable, probabilities, xtitle,
+                       show_p0=False):
+    """ Plots probabilities for first cell being blocked, first free but second blocked
+    etc. as function of controlled variable. See plot_information for full documentation
+
+    Parameters
+    ----------
+    probabilities : list of lists of probabilities of cells being occupied in
+                    each execution
+    show_p0 : whether to draw probability that wall cennot be moved at all or not
+    """
+    probabilities_dict = collections.defaultdict(list)
+    controlled_var_dict = collections.defaultdict(list)
+    # j indexes the different executions
+    for j, distribution in enumerate(probabilities):
+        # i indexes probabilities inside a specific execution
+        for i, probability in enumerate(distribution):
+            probabilities_dict[i].append(probability)
+            controlled_var_dict[i].append(controlled_variable[j])
+
+    for key in probabilities_dict.keys():
+        if not show_p0 and key == 0:
+            continue
+        plt.plot(controlled_var_dict[key], probabilities_dict[key], ".",
+                 label=f"p{key}")
+    plt.legend()
+    plt.title("Probabilities of amount of first consecutive free cells")
+    plt.ylabel("Probability")
+    plt.xlabel(xtitle)
+    plt.savefig("Probabilities_to_sizes.png")
+    plt.show()
