@@ -1,4 +1,3 @@
-import os.path
 import glob
 from multiprocessing import Pool
 from analyze_stk import *
@@ -9,22 +8,22 @@ if __name__ == "__main__":
     # %%
     #     files = glob.glob("stks/*.mat")
     #     xtitle = "Board length (cm)"
-    # files = glob.glob("num_hexbugs_stks/*.mat")
-    # xtitle = "Number of hexbugs"
-    # lengths = [float(os.path.basename(os.path.splitext(filename)[0]).replace("_2", "").replace("_1", "")) for filename
-    #            in files]
-    # %%
-    # Work with densities (combine number of hexbugs and board sizes)
-    board_sizes_files = glob.glob("stks/*.mat")
-    num_hexbugs_files = glob.glob("num_hexbugs_stks/*.mat")
-    board_size_densities = [6.0 / float(os.path.basename(os.path.splitext(filename)[0]).replace("_2", "").replace("_1", ""))
-                            for filename in board_sizes_files]
-    num_hexbugs_densities = [float(os.path.basename(os.path.splitext(filename)[0]).replace("_2", "").replace("_1", "")) / 25.1
-                             for filename in num_hexbugs_files]
-    files = board_sizes_files + num_hexbugs_files
-    lengths = board_size_densities + num_hexbugs_densities
-    # xtitle = "Hexbug 1D density (1 / cm)"
-    xtitle = "Density"
+    files = glob.glob("num_hexbugs_stks/*.mat")
+    xtitle = "Number of hexbugs"
+    lengths = [float(os.path.basename(os.path.splitext(filename)[0]).replace("_2", "").replace("_1", "")) for filename
+               in files]
+    # # %%
+    # # Work with densities (combine number of hexbugs and board sizes)
+    # board_sizes_files = glob.glob("stks/*.mat")
+    # num_hexbugs_files = glob.glob("num_hexbugs_stks/*.mat")
+    # board_size_densities = [6.0 / float(os.path.basename(os.path.splitext(filename)[0]).replace("_2", "").replace("_1", ""))
+    #                         for filename in board_sizes_files]
+    # num_hexbugs_densities = [float(os.path.basename(os.path.splitext(filename)[0]).replace("_2", "").replace("_1", "")) / 25.1
+    #                          for filename in num_hexbugs_files]
+    # files = board_sizes_files + num_hexbugs_files
+    # lengths = board_size_densities + num_hexbugs_densities
+    # # xtitle = "Hexbug 1D density (1 / cm)"
+    # xtitle = "Density"
     # %%
     with Pool(8) as p:
         # Analyze the files
@@ -42,13 +41,13 @@ if __name__ == "__main__":
     probabilities = [prob[0] for prob in occupied_probabilities]
     cumulative_counts = [prob[1] for prob in occupied_probabilities]
     infos = [information(prob) for prob in probabilities]
-    plot_information(lengths, infos, "Density",
-                     groups=["Board Size", "Num Hexbugs"],
-                     group_sizes=[len(board_sizes_files), len(num_hexbugs_files)])
+    plot_information(lengths, infos, xtitle)
+                     # groups=["Board Size", "Num Hexbugs"],
+                     # group_sizes=[len(board_sizes_files), len(num_hexbugs_files)])
     #%%
-    plot_probabilities(lengths, probabilities, xtitle, show_p0=False)
-    for i, c in enumerate(cumulative_counts):
-        plot_cumulative_probabilities(lengths[i], c)
+    plot_probabilities(lengths, probabilities, xtitle, show_p0=False, is_num_hexbugs=(xtitle == "Number of hexbugs"))
+    # for i, c in enumerate(cumulative_counts):
+    #     plot_cumulative_probabilities(lengths[i], c)
 # %%
 # Fit the first peak of each autocorrelation graph to a Gaussian
 # correlation_fits = [fourier_peak_fit(c[1], False, files[i], 2) for i, c in enumerate(correlations)]
@@ -79,3 +78,10 @@ if __name__ == "__main__":
 #     plt.ylabel("Average duration (sec)")
 #     plt.savefig("average_blocked_duration.png")
 #     plt.show()
+    #%%
+    # split_correlations(analysis_results[5], lengths[5])
+    # sub_experiments = np.array_split(analysis_results[-12], 10)
+    # correlations = [autocorrelations(r) for r in sub_experiments]
+    # correlation_fits = [fourier_peak_fit(c[1], True, f"{i}", 2,
+    #                                      smoothing_window_size=31) for i, c in enumerate(correlations)]
+    # correlation_fit_trends(correlation_fits, range(len(correlation_fits)), "Length (cm)")

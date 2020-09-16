@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-import os
-
+import os.path
 import scipy.io as sio
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,7 +8,6 @@ import time
 import scipy.signal
 import lab
 import collections
-import pandas
 
 # %%
 CELL_WIDTH = 50     # Virtual cell width in pixels (should be barrier blocked size)
@@ -253,7 +251,7 @@ def correlation_peaks(lags, values):
     return peak_indices, properties
 
 
-def autocorrelations(analysis_res):
+def autocorrelations(analysis_res, plot=False):
     """
     Finds and plots autocorrelations in engine blocked/unblocked data.
     Returns full correlation results (list of lags and list of correlation values for each lag), as well as list of
@@ -268,6 +266,10 @@ def autocorrelations(analysis_res):
     # Returns lists of:
     # [lags (frames)] [correlation value] ...
     corrs = plt.acorr(blocked, maxlags=None, usevlines=True)
+    if plot:
+        plt.show()
+    else:
+        plt.clf()
     lags = corrs[0]
     values = corrs[1]
 
@@ -402,6 +404,15 @@ def first_decay_slope(lags, values, plot=False):
 
 
 def correlation_fit_trends(correlation_fits, lengths, xtitle):
+    """Plot peak locations and widths for all gaussians fitted to
+    different results in fourier_peak_fit
+
+    Parameters
+    ----------
+    correlation_fits : fits returned from fourier_peak_fit
+    lengths : list of lengths of board for each correlation_fits
+    xtitle : how to name the x axis
+    """
     fitted_lengths = []
     centers = []
     centers_errs = []
@@ -432,6 +443,25 @@ def correlation_fit_trends(correlation_fits, lengths, xtitle):
 
 
 def first_passages(analysis_results, lengths):
+    """Analyzes sub-experiments in which the engine remains blocked and returns
+    their statistics
+
+    Parameters
+    ----------
+    analysis_results : list of stk results
+    lengths : the dependent variable matching each item in analysis_results
+
+    Returns
+    -------
+    unique_lengths
+        list of unique titles
+    durations
+        durations of each unique experiment
+    durations_avg
+        average duration for each unique experiment
+    durations_stdev
+        standard deviation of the experiment durations
+    """
     # Merge results that belong to the same board size (multiple files)
     unique_lengths = np.unique(lengths)
     durations = {}
@@ -467,7 +497,7 @@ def information(occupied_probabilities):
     return - np.sum(occupied_probabilities * np.log(occupied_probabilities))
 
 
-def plot_information(controlled_variable, infos, xtitle, groups, group_sizes):
+def plot_information(controlled_variable, infos, xtitle, groups=None, group_sizes=None):
     """Plots information as function of a controlled variable
 
     Parameters
@@ -493,7 +523,7 @@ def plot_information(controlled_variable, infos, xtitle, groups, group_sizes):
 
 
 def plot_probabilities(controlled_variable, probabilities, xtitle,
-                       show_p0=True):
+                       show_p0=True, is_num_hexbugs=False):
     """ Plots probabilities for first cell being blocked, first free but second blocked
     etc. as function of controlled variable. See plot_information for full documentation
 
@@ -502,25 +532,48 @@ def plot_probabilities(controlled_variable, probabilities, xtitle,
     probabilities : list of lists of probabilities of cells being occupied in
                     each execution
     show_p0 : whether to draw probability that wall cennot be moved at all or not
+    is_num_hexbugs : whether controlled_variable is number of hexbugs (or another parameter
+                     such as board size). If True, the expected value if hexbugs were independent
+                     will be plotted)
     """
     probabilities_dict = collections.defaultdict(list)
     controlled_var_dict = collections.defaultdict(list)
+
+    if is_num_hexbugs:
+        one_hexbug_probabilities = []
+
     # j indexes the different executions
     for j, distribution in enumerate(probabilities):
+        if j == 1:
+            one_hexbug_probabilities = distribution
+
         # i indexes probabilities inside a specific execution
         for i, probability in enumerate(distribution):
             probabilities_dict[i].append(probability)
             controlled_var_dict[i].append(controlled_variable[j])
 
-    for key in probabilities_dict.keys():
-        if not show_p0 and key == 0:
+    # Keys here are p0, p1, p2, ...
+    plots = []
+    for probability_index in probabilities_dict.keys():
+        if not show_p0 and probability_index == 0:
             continue
-        plt.plot(controlled_var_dict[key], probabilities_dict[key], ".",
-                 label=f"p{key}")
+        p = plt.plot(controlled_var_dict[probability_index], probabilities_dict[probability_index], ".",
+                     label=f"p{probability_index}")
+        if is_num_hexbugs:
+            # Plot expected probability if hexbugs were independent
+            allowed_area = 1 - ((probability_index + 1) / len(probabilities_dict))
+            # This is the probability of bugs not being in the
+            expected = [(allowed_area ** c) * () for c in controlled_var_dict[probability_index]]
+            plt.plot(controlled_var_dict[probability_index],
+                     expected,
+                     "+", color=p[0].get_color(),
+                     label=f"p{probability_index} (expected)")
+
     plt.legend()
     plt.title("Probabilities of amount of first consecutive free cells")
     plt.ylabel("Probability")
     plt.xlabel(xtitle)
+    plt.semilogy()
     plt.savefig(f"Probabilities_to_{xtitle}.png")
     plt.show()
 
@@ -550,3 +603,24 @@ def plot_cumulative_probabilities(controlled_variable, cumulative_counts,
         path = os.path.join("cumulative", f"{str(controlled_variable)}_2.png")
     plt.savefig(path)
     plt.show()
+
+
+def split_correlations(analysis_results, title):
+    """Finds and plots autocorrelations for a certain experiment after dividing it into
+    shorter experiments.
+    If the correlation are real, they should appear in the shorter experiments too. This
+    is one way to overcome problems with initial conditions.
+
+    Parameters
+    ----------
+    analysis_results : positions of bugs in the experiment
+    title : name of the experiment
+
+    Returns
+    -------
+
+    """
+    sub_experiments = np.array_split(analysis_results, 10)
+    correlations = [autocorrelations(r) for r in sub_experiments]
+    correlation_fits = [fourier_peak_fit(c[1], True, f"{title} {i}", 2) for i, c in enumerate(correlations)]
+    correlation_fit_trends(correlation_fits, range(len(correlation_fits)), "Length (cm)")
