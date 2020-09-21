@@ -549,6 +549,28 @@ def interpolate_probability(controlled_variables, probabilities, params_guess=(0
     return fit_func
 
 
+def organize_probabilities(controlled_variable, probabilities):
+    """Organizes probabilities by event (p0, p1, p2...) rather than by experiment (board size)
+
+
+    Returns
+    -------
+    Dictionary of board sizes and probability value by probability indices
+    """
+    probabilities_dict = collections.defaultdict(list)
+    controlled_var_dict = collections.defaultdict(list)
+
+    # Extract data from all executions to lists indexed by the probability (rather than by experiment which is how the
+    # raw data is sorted)
+    # j indexes the different executions
+    for j, distribution in enumerate(probabilities):
+        # i indexes probabilities inside a specific execution
+        for i, probability in enumerate(distribution):
+            probabilities_dict[i].append(probability)
+            controlled_var_dict[i].append(controlled_variable[j])
+
+    return controlled_var_dict, probabilities_dict
+
 def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True, is_num_hexbugs=False):
     """ Plots probabilities for first cell being blocked, first free but second blocked
     etc. as function of controlled variable. See plot_information for full documentation.
@@ -566,17 +588,7 @@ def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True,
     ----------
     List of functions of interpolated probabilities as function of controlled variable (p0, p1, p2...)
     """
-    probabilities_dict = collections.defaultdict(list)
-    controlled_var_dict = collections.defaultdict(list)
-
-    # Extract data from all executions to lists indexed by the probability (rather than by experiment which is how the
-    # raw data is sorted)
-    # j indexes the different executions
-    for j, distribution in enumerate(probabilities):
-        # i indexes probabilities inside a specific execution
-        for i, probability in enumerate(distribution):
-            probabilities_dict[i].append(probability)
-            controlled_var_dict[i].append(controlled_variable[j])
+    controlled_var_dict, probabilities_dict = organize_probabilities(controlled_variable, probabilities)
 
     # Keys here are p0, p1, p2, ...
     interpolated_funcs = []
@@ -614,6 +626,7 @@ def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True,
     plt.ylabel("Probability")
     plt.xlabel(xtitle)
     plt.semilogy()
+    plt.tight_layout()
     plt.savefig(f"Probabilities_to_{xtitle}.png")
     plt.show()
 
@@ -678,7 +691,7 @@ def split_correlations(analysis_results, title):
     correlation_fit_trends(correlation_fits, range(len(correlation_fits)), "Length (cm)")
 
 
-def estimate_total_information(length_to_info, lengths : list, probabilities):
+def estimate_total_information(length_to_info, lengths, probabilities):
     """Calculates the expected average information for a full compression of the board, starting with the largest length
     and continuing to smaller boards sizes in steps of CELL_WIDTH pixels up to the smallest size in lengths.
     The weighted average information gained per board size is calculated recursively in a dynamic-programming (bottom-up)
@@ -707,16 +720,32 @@ def estimate_total_information(length_to_info, lengths : list, probabilities):
         step_sizes.append(current_length)
         current_length += CELL_WIDTH
 
+    # Find fits for the different events as function of board size
+    controlled_var_dict, probabilities_dict = organize_probabilities(lengths, probabilities)
+    interpolated_funcs = []
+    for probability_index in probabilities_dict.keys():
+        if probability_index == 0:
+            continue
+        interpolated = interpolate_probability(controlled_var_dict[probability_index],
+                                               probabilities_dict[probability_index])
+        interpolated_funcs.append(interpolated)
+
     # Calculate total information per step, bottom up
     # infos is list of information at a specific size
     # total_info is the sum of the information at a specific step and the information that will be required to compress
     # from the current size to the smallest possible size
     # For the smallest size, the information is simply the information at this size (no further info will be gained
     # after compression since this is defined to be the last step, so no more measurements afterwards)
-    total_infos = [infos[0]]
+    total_infos = []
+    for i, length in enumerate(step_sizes):
+        current_info = infos[i]
+        # Calculate normalized conditional probabilities of being able to move barrier to smaller sizes
+        current_probabilities = np.array([interpolated_funcs[j](length) for j in range(min(i,
+                                                                                           len(interpolated_funcs)))])
+        current_probabilities = current_probabilities / np.sum(current_probabilities)
+        # Add the probabilities of next steps, weighted by probability of reaching them
+        for j, probability in enumerate(current_probabilities):
+            current_info += total_infos[i - j - 1] * probability
+        total_infos.append(current_info)
 
-
-
-
-
-
+    return total_infos, step_sizes

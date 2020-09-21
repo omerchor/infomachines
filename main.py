@@ -54,6 +54,7 @@ if __name__ == "__main__":
     infos = [information(prob) for prob in probabilities]
     # Find fit for interpolation of info to length ratio
     params, param_errs, _, _ = lab.fit(lab.line, lengths, infos, None, (0,0))
+    length_to_infos = partial(lab.line, params)
     lab.plot(lab.line, params, lengths, infos, None, xlabel=xtitle, ylabel="Information",
              title=f"y={params[0]:.3e}x{params[1]:.3f}", fmt=".")
     # plot_information(lengths, infos, xtitle)
@@ -64,6 +65,15 @@ if __name__ == "__main__":
     plot_probabilities(lengths, probabilities, xtitle, show_p0=False)
     # for i, c in enumerate(cumulative_counts):
     #     plot_cumulative_probabilities(lengths[i], c)
+    #%%
+    total_infos, board_sizes = estimate_total_information(length_to_infos, lengths, probabilities)
+    plt.plot(board_sizes, total_infos, ".", label="Total info")
+    plt.plot(lengths, infos, ".", label="Local info")
+    plt.legend()
+    plt.xlabel(xtitle)
+    plt.ylabel("Information")
+    plt.title(f"Estimated information for complete compression\nand steady state information\nCell width: {CELL_WIDTH} pixels")
+    plt.show()
 # %%
 # Fit the first peak of each autocorrelation graph to a Gaussian
 # correlation_fits = [fourier_peak_fit(c[1], False, files[i], 2) for i, c in enumerate(correlations)]
