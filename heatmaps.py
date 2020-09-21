@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
-import scipy.io as sio
-import numpy as np
-import matplotlib.pyplot as plt
 import os
-import skimage.transform
 from multiprocessing import Pool
-import analyze_stk
+
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.io as sio
+import skimage.transform
+
 # %%
 CELLS_RATIO = 15
 #%%
