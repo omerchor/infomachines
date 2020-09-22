@@ -9,7 +9,7 @@ if __name__ == "__main__":
     # %%
     # Last 4 measurements (39 and 40 cm) seem a little outlying in terms of length to pixels (old measurements, maybe
     # the camera moved)
-    files = glob.glob("stks/*.mat")[:-4]
+    files = glob.glob("stks/*.mat")
     xtitle = "Board length (pixels)"
     # files = glob.glob("num_hexbugs_stks/*.mat")
     # xtitle = "Number of hexbugs"
@@ -62,13 +62,24 @@ if __name__ == "__main__":
     #                  # group_sizes=[len(board_sizes_files), len(num_hexbugs_files)])
     plt.show()
     #%%
-    plot_probabilities(lengths, probabilities, xtitle, show_p0=False)
+    plot_probabilities(lengths, probabilities, xtitle, show_p0=True)
     # for i, c in enumerate(cumulative_counts):
     #     plot_cumulative_probabilities(lengths[i], c)
     #%%
-    total_infos, board_sizes = estimate_total_information(length_to_infos, lengths, probabilities)
-    plt.plot(board_sizes, total_infos, ".", label="Total info")
-    plt.plot(lengths, infos, ".", label="Local info")
+    board_lengths, info_per_step, distance_diffs, diff_errs = simulate_experiment(length_to_infos, lengths,
+                                                                                  probabilities, 10**-1)
+    cumulative_errors = np.cumsum(diff_errs)
+    steps = np.arange(1, len(board_lengths) + 1)
+    plt.plot(steps, board_lengths)
+    plt.fill_between(steps, board_lengths - cumulative_errors, board_lengths + cumulative_errors, alpha=0.5)
+    plt.xlabel("Step number")
+    plt.ylabel("Board length (pixels)")
+    plt.title("Average board length as function of number of movements")
+    plt.show()
+
+    plt.plot(board_lengths, np.cumsum(info_per_step), ".", label="Total info")
+    plt.plot(lengths, infos, ".", label="Local info (measured)")
+    plt.plot(board_lengths, info_per_step, ".", label="Local info (estimated)")
     plt.legend()
     plt.xlabel(xtitle)
     plt.ylabel("Information")

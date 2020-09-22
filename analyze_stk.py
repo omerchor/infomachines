@@ -543,9 +543,27 @@ def interpolate_probability(controlled_variables, probabilities, params_guess=(0
     -------
     The interpolation function for the x,y data
     """
+    # Merge probabilities for same value of controlled variable
+    unique_vals = np.unique(controlled_variables)
+    unique_probs = []
+    for v in unique_vals:
+        np_probabilities = np.array(probabilities)
+        indices = np.where(np_probabilities == v)
+        current_probabilities = np_probabilities[indices]
+        unique_probs.append(np.average(current_probabilities))
+    return interp1d(unique_vals, unique_probs, fill_value="extrapolate")
+
     params, param_errs, _, _ = lab.fit(probabilities_fit_function, controlled_variables, probabilities, None,
                                        params_guess)
-    fit_func = partial(probabilities_fit_function, params)
+
+    # Since extrapolation may return negative values, fix it by replacing them with zero
+    def fit_func(x):
+        result_probability = probabilities_fit_function(params, x)
+        if result_probability > 0:
+            return result_probability
+        return 0
+    fit_func = np.vectorize(fit_func)
+
     return fit_func
 
 
@@ -570,6 +588,25 @@ def organize_probabilities(controlled_variable, probabilities):
             controlled_var_dict[i].append(controlled_variable[j])
 
     return controlled_var_dict, probabilities_dict
+
+
+def fit_probabilities(controlled_variable, probabilities):
+    """Finds a fit for probabilities of each event (p0, p1, p2...) as function of controlled variable
+
+    Returns
+    -------
+    List of functions returning estimated probability at a certain controlled variable value:
+    [p_0, p_1, p_2...] - p_i(controlled_value) returns the probability of i-th event at controlled_value
+    """
+    # Find fits for the different events as function of board size
+    controlled_var_dict, probabilities_dict = organize_probabilities(controlled_variable, probabilities)
+    probability_funcs = []
+    for probability_index in probabilities_dict.keys():
+        func = interpolate_probability(controlled_var_dict[probability_index],
+                                               probabilities_dict[probability_index])
+        probability_funcs.append(func)
+    return probability_funcs
+
 
 def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True, is_num_hexbugs=False):
     """ Plots probabilities for first cell being blocked, first free but second blocked
@@ -600,7 +637,8 @@ def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True,
         interpolated = interpolate_probability(controlled_var_dict[probability_index],
                                                probabilities_dict[probability_index])
         # Plot interpolation
-        data_range = np.linspace(min(controlled_var_dict[probability_index]), max(controlled_var_dict[probability_index]),
+        data_range = np.linspace(min(100, min(controlled_var_dict[probability_index])),
+                                 max(controlled_var_dict[probability_index]),
                                  100)
         interpolated = interpolated(data_range)
         interpolated_funcs.append(interpolated)
@@ -691,7 +729,7 @@ def split_correlations(analysis_results, title):
     correlation_fit_trends(correlation_fits, range(len(correlation_fits)), "Length (cm)")
 
 
-def estimate_total_information(length_to_info, lengths, probabilities):
+def simulate_experiment(length_to_info, lengths, probabilities, covergence_limit=10**-3):
     """Calculates the expected average information for a full compression of the board, starting with the largest length
     and continuing to smaller boards sizes in steps of CELL_WIDTH pixels up to the smallest size in lengths.
     The weighted average information gained per board size is calculated recursively in a dynamic-programming (bottom-up)
@@ -705,47 +743,42 @@ def estimate_total_information(length_to_info, lengths, probabilities):
         measured lengths
     probabilities : list
         list of distributions matching the measurements in lengths
+    covergence_limit : float
+        smallest barrier movement distance to be considered. Board will stop being compressed when distance differences
+        reach this value.
 
     Returns
     -------
     The total information that is expected to be measured in a single experiment.
     """
-    # Pre-calculate information per size for all steps, starting with smallest and growing by CELL_WIDTH each step up to
-    # the maximal measured length
-    current_length = min(lengths)
-    step_sizes = []
-    infos = []
-    while current_length < max(lengths):
-        infos.append(length_to_info(current_length))
-        step_sizes.append(current_length)
-        current_length += CELL_WIDTH
+    total_info = 0
+    # Average distance barrier is moved per step until reaching the minimal distance
+    distance_diffs = []
+    distance_diffs_stdevs = []
+    # Information at each position of the barrier
+    info_per_step = []
+    # Board sizes at each step
+    board_lengths = []
 
-    # Find fits for the different events as function of board size
-    controlled_var_dict, probabilities_dict = organize_probabilities(lengths, probabilities)
-    interpolated_funcs = []
-    for probability_index in probabilities_dict.keys():
-        if probability_index == 0:
-            continue
-        interpolated = interpolate_probability(controlled_var_dict[probability_index],
-                                               probabilities_dict[probability_index])
-        interpolated_funcs.append(interpolated)
+    probability_functions = fit_probabilities(lengths, probabilities)
+    move_distances = np.arange(len(probability_functions)) * CELL_WIDTH
 
-    # Calculate total information per step, bottom up
-    # infos is list of information at a specific size
-    # total_info is the sum of the information at a specific step and the information that will be required to compress
-    # from the current size to the smallest possible size
-    # For the smallest size, the information is simply the information at this size (no further info will be gained
-    # after compression since this is defined to be the last step, so no more measurements afterwards)
-    total_infos = []
-    for i, length in enumerate(step_sizes):
-        current_info = infos[i]
-        # Calculate normalized conditional probabilities of being able to move barrier to smaller sizes
-        current_probabilities = np.array([interpolated_funcs[j](length) for j in range(min(i,
-                                                                                           len(interpolated_funcs)))])
-        current_probabilities = current_probabilities / np.sum(current_probabilities)
-        # Add the probabilities of next steps, weighted by probability of reaching them
-        for j, probability in enumerate(current_probabilities):
-            current_info += total_infos[i - j - 1] * probability
-        total_infos.append(current_info)
+    current_length = max(lengths)
+    current_diff = 100
+    while current_diff > covergence_limit and current_length > CELL_WIDTH:
+        board_lengths.append(current_length)
+        info_per_step.append(length_to_info(current_length))
 
-    return total_infos, step_sizes
+        # Calculate the average distance the board will now move
+        current_probabilities = np.array([f(current_length) for f in probability_functions])
+        # Only allow to move the board to positive board sizes
+        allowed_indices = np.where(move_distances < current_length - CELL_WIDTH)
+        current_probabilities = current_probabilities[allowed_indices]
+        current_move_distances = move_distances[allowed_indices]
+        current_diff = np.average(current_move_distances, weights=current_probabilities)
+        distance_diffs.append(current_diff)
+        diff_stdev = np.sqrt(np.average((move_distances-current_diff)**2, weights=current_probabilities))
+        distance_diffs_stdevs.append(diff_stdev)
+        current_length -= current_diff
+
+    return board_lengths, info_per_step, distance_diffs, distance_diffs_stdevs
