@@ -62,28 +62,28 @@ if __name__ == "__main__":
     #                  # group_sizes=[len(board_sizes_files), len(num_hexbugs_files)])
     plt.show()
     #%%
-    plot_probabilities(lengths, probabilities, xtitle, show_p0=True)
+    x = plot_probabilities(lengths, probabilities, xtitle, show_p0=False,
+                           params_guess=(0.1, 0.1, 0.01))
     # for i, c in enumerate(cumulative_counts):
     #     plot_cumulative_probabilities(lengths[i], c)
     #%%
     board_lengths, info_per_step, distance_diffs, diff_errs = simulate_experiment(length_to_infos, lengths,
-                                                                                  probabilities, 10**-1)
+                                                                                  probabilities)
     cumulative_errors = np.cumsum(diff_errs)
-    steps = np.arange(1, len(board_lengths) + 1)
-    plt.plot(steps, board_lengths)
-    plt.fill_between(steps, board_lengths - cumulative_errors, board_lengths + cumulative_errors, alpha=0.5)
-    plt.xlabel("Step number")
-    plt.ylabel("Board length (pixels)")
-    plt.title("Average board length as function of number of movements")
-    plt.show()
+    steps = np.arange(0, len(board_lengths))
 
-    plt.plot(board_lengths, np.cumsum(info_per_step), ".", label="Total info")
-    plt.plot(lengths, infos, ".", label="Local info (measured)")
-    plt.plot(board_lengths, info_per_step, ".", label="Local info (estimated)")
-    plt.legend()
-    plt.xlabel(xtitle)
-    plt.ylabel("Information")
-    plt.title(f"Estimated information for complete compression\nand steady state information\nCell width: {CELL_WIDTH} pixels")
+    fig, axs = plt.subplots(2, sharex=True)
+    axs[0].plot(steps, board_lengths, ".")
+    max_vals = np.minimum(board_lengths + cumulative_errors, max(board_lengths))
+    min_vals = np.maximum(board_lengths - cumulative_errors, CELL_WIDTH)
+    axs[0].fill_between(steps, min_vals, max_vals, alpha=0.5)
+    axs[0].set_ylabel("Board length (pixels)")
+    axs[0].set_title("Average board length as function of number of movements")
+
+    axs[1].plot(steps, np.cumsum(info_per_step), ".", label="Total info")
+    axs[1].set_ylabel("Information")
+    axs[1].set_xlabel("Step number")
+    axs[1].set_title("Total information as function of number of movements")
     plt.show()
 # %%
 # Fit the first peak of each autocorrelation graph to a Gaussian

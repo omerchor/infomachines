@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.io as sio
 import scipy.signal
-from scipy.interpolate import interp1d
+import scipy.interpolate
 
 import lab
 
@@ -525,11 +525,11 @@ def plot_information(controlled_variable, infos, xtitle, groups=None, group_size
     plt.show()
 
 
-def probabilities_fit_function(B, x):
-    return B[0] - B[1]*np.exp(- B[2] * x)
+# def probabilities_fit_function(B, x):
+#     return scipy.interpolate.barycentric_interpolate
 
 
-def interpolate_probability(controlled_variables, probabilities, params_guess=(0, 1, 0.01)):
+def interpolate_probability(controlled_variables, probabilities, params_guess=(0.1, 0.1, 0.01)):
     """Finds a fit for probabilities as function of the controlled variable.
 
     Parameters
@@ -543,28 +543,27 @@ def interpolate_probability(controlled_variables, probabilities, params_guess=(0
     -------
     The interpolation function for the x,y data
     """
-    # Merge probabilities for same value of controlled variable
-    unique_vals = np.unique(controlled_variables)
-    unique_probs = []
-    for v in unique_vals:
-        np_probabilities = np.array(probabilities)
-        indices = np.where(np_probabilities == v)
-        current_probabilities = np_probabilities[indices]
-        unique_probs.append(np.average(current_probabilities))
-    return interp1d(unique_vals, unique_probs, fill_value="extrapolate")
-
-    params, param_errs, _, _ = lab.fit(probabilities_fit_function, controlled_variables, probabilities, None,
-                                       params_guess)
-
-    # Since extrapolation may return negative values, fix it by replacing them with zero
-    def fit_func(x):
-        result_probability = probabilities_fit_function(params, x)
-        if result_probability > 0:
-            return result_probability
-        return 0
-    fit_func = np.vectorize(fit_func)
-
-    return fit_func
+    try:
+        return scipy.interpolate.interp1d(controlled_variables, probabilities, bounds_error=False, fill_value=0,
+                                          kind='slinear')#, fill_value="extrapolate")
+    except ValueError:
+        def zero_func(x):
+            return 0
+        zero_func = np.vectorize(zero_func)
+        return zero_func
+    new_guess = (max(probabilities), params_guess[1], params_guess[2], min(controlled_variables))
+    # params, param_errs, _, _ = lab.fit(probabilities_fit_function, controlled_variables, probabilities, None,
+    #                                    (max(probabilities), params_guess[1], params_guess[2]))
+    #
+    # # Since extrapolation may return negative values, fix it by replacing them with zero
+    # def fit_func(x):
+    #     result_probability = probabilities_fit_function(params, x)
+    #     if result_probability > 0:
+    #         return result_probability
+    #     return 0
+    # fit_func = np.vectorize(fit_func)
+    #
+    # return fit_func
 
 
 def organize_probabilities(controlled_variable, probabilities):
@@ -608,7 +607,8 @@ def fit_probabilities(controlled_variable, probabilities):
     return probability_funcs
 
 
-def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True, is_num_hexbugs=False):
+def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True, is_num_hexbugs=False,
+                       params_guess=(0.1, 0.1, 0.01)):
     """ Plots probabilities for first cell being blocked, first free but second blocked
     etc. as function of controlled variable. See plot_information for full documentation.
 
@@ -635,11 +635,12 @@ def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True,
         p = plt.plot(controlled_var_dict[probability_index], probabilities_dict[probability_index], ".",
                      label=f"p{probability_index}")
         interpolated = interpolate_probability(controlled_var_dict[probability_index],
-                                               probabilities_dict[probability_index])
+                                               probabilities_dict[probability_index],
+                                               params_guess)
         # Plot interpolation
-        data_range = np.linspace(min(100, min(controlled_var_dict[probability_index])),
+        data_range = np.linspace(100,
                                  max(controlled_var_dict[probability_index]),
-                                 100)
+                                 1000)
         interpolated = interpolated(data_range)
         interpolated_funcs.append(interpolated)
         plt.plot(data_range, interpolated, "--", color=p[0].get_color(), label=f"p{probability_index} (fit)")
@@ -663,7 +664,7 @@ def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True,
     plt.title("Probabilities of amount of first consecutive free cells")
     plt.ylabel("Probability")
     plt.xlabel(xtitle)
-    plt.semilogy()
+    # plt.semilogy()
     plt.tight_layout()
     plt.savefig(f"Probabilities_to_{xtitle}.png")
     plt.show()
@@ -766,18 +767,23 @@ def simulate_experiment(length_to_info, lengths, probabilities, covergence_limit
     current_length = max(lengths)
     current_diff = 100
     while current_diff > covergence_limit and current_length > CELL_WIDTH:
-        board_lengths.append(current_length)
-        info_per_step.append(length_to_info(current_length))
-
         # Calculate the average distance the board will now move
         current_probabilities = np.array([f(current_length) for f in probability_functions])
         # Only allow to move the board to positive board sizes
         allowed_indices = np.where(move_distances < current_length - CELL_WIDTH)
+
+        # Reached size in which all probabilities were extrapolated to be 0 (or board too small to move)
+        if len(allowed_indices) == 0 or sum(current_probabilities) == 0:
+            break
+
+        board_lengths.append(current_length)
+        info_per_step.append(length_to_info(current_length))
+
         current_probabilities = current_probabilities[allowed_indices]
         current_move_distances = move_distances[allowed_indices]
         current_diff = np.average(current_move_distances, weights=current_probabilities)
         distance_diffs.append(current_diff)
-        diff_stdev = np.sqrt(np.average((move_distances-current_diff)**2, weights=current_probabilities))
+        diff_stdev = np.sqrt(np.average((current_move_distances-current_diff)**2, weights=current_probabilities))
         distance_diffs_stdevs.append(diff_stdev)
         current_length -= current_diff
 
