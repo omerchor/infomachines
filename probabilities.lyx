@@ -90,7 +90,7 @@
 \end_inset
 
  עבור 
-\begin_inset Formula $N$
+\begin_inset Formula $N_{cells}$
 \end_inset
 
  תאים סה
@@ -108,7 +108,7 @@
  באגים היא
 \begin_inset Formula 
 \[
-\left(1-\frac{n+1}{N}\right)^{\text{m-1}}\cdot\frac{m}{N}
+P_{n}\left(m\right)=\left(1-\frac{n+1}{N_{cells}}\right)^{m-1}\cdot\frac{m}{N_{cells}}
 \]
 
 \end_inset
@@ -181,7 +181,7 @@
 \begin_inset Formula $p_{n+1}$
 \end_inset
 
-.
+(.
 \end_layout
 
 \end_body
