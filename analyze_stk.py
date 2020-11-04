@@ -562,18 +562,23 @@ def plot_probabilities(controlled_variable, probabilities, xtitle,
         if is_num_hexbugs:
             # Plot expected probability if hexbugs were independent
             allowed_area = 1 - ((probability_index + 1) / len(probabilities_dict))
-            # This is the probability of bugs not being in the
-            expected = [(allowed_area ** c) * () for c in controlled_var_dict[probability_index]]
-            plt.plot(controlled_var_dict[probability_index],
+            # c here is the number of hexbugs
+            expected = [(allowed_area ** (c-1)) * (c / len(probabilities_dict)) for c in controlled_var_dict[probability_index]]
+            # Sort by controlled variable
+            sort_list = list(zip(controlled_var_dict[probability_index], expected))
+            sort_list.sort()
+            num_hexbugs = [x for x, y in sort_list]
+            expected = [y for x, y in sort_list]
+            plt.plot(num_hexbugs,
                      expected,
-                     "+", color=p[0].get_color(),
+                     "--+", color=p[0].get_color(),
                      label=f"p{probability_index} (expected)")
 
-    plt.legend()
+    plt.legend(bbox_to_anchor=(1.05, 1))
     plt.title("Probabilities of amount of first consecutive free cells")
     plt.ylabel("Probability")
     plt.xlabel(xtitle)
-    plt.semilogy()
+    # plt.semilogy()
     plt.savefig(f"Probabilities_to_{xtitle}.png")
     plt.show()
 
