@@ -1,9 +1,10 @@
-import numpy as np
-import scipy.odr
-import matplotlib.pyplot as plt
-from scipy.stats import chi2
 import csv
 from math import floor, ceil
+
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.odr
+from scipy.stats import chi2
 from tabulate import tabulate
 
 

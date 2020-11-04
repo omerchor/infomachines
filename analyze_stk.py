@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
-import os.path
-import scipy.io as sio
-import numpy as np
-import matplotlib.pyplot as plt
-import time
-import scipy.signal
-import lab
 import collections
+import os.path
+import time
+from functools import partial
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.io as sio
+import scipy.signal
+import scipy.interpolate
+
+import lab
 
 # %%
 CELL_WIDTH = 50     # Virtual cell width in pixels (should be barrier blocked size)
@@ -79,15 +82,15 @@ def analyze_positions(frames, boundaries, num_frames):
 def parse_file(filename):
     """
     Parses a .mat file containing an stk object.
-    Returns list of locations by frame.
+    Returns list of locations by frame, as well as board size in pixels
     """
     t = time.time()
     stk = parse_stk(filename)
     frames, min_x, max_x, num_frames = group_by_frame(stk)
     boundaries = (min_x, max_x)
     res = analyze_positions(frames, boundaries, num_frames)
-    print(f'{filename}:\telapsed {time.time() - t:.2f} seconds')
-    return res
+    print(f"{filename}:\t\t {max_x - min_x} pixels")
+    return res, max_x - min_x
 
 
 def get_probabilities(analysis_res):
@@ -522,10 +525,92 @@ def plot_information(controlled_variable, infos, xtitle, groups=None, group_size
     plt.show()
 
 
-def plot_probabilities(controlled_variable, probabilities, xtitle,
-                       show_p0=True, is_num_hexbugs=False):
+# def probabilities_fit_function(B, x):
+#     return scipy.interpolate.barycentric_interpolate
+
+
+def interpolate_probability(controlled_variables, probabilities, params_guess=(0.1, 0.1, 0.01)):
+    """Finds a fit for probabilities as function of the controlled variable.
+
+    Parameters
+    ----------
+    controlled_variables : list
+        list of values of the controlled variable in the experiment (x-axis)
+    probabilities : list
+        list of experiment results (probability) for each value in controlled_variables (y-axis)
+
+    Returns
+    -------
+    The interpolation function for the x,y data
+    """
+    try:
+        return scipy.interpolate.interp1d(controlled_variables, probabilities, bounds_error=False, fill_value=0,
+                                          kind='slinear')#, fill_value="extrapolate")
+    except ValueError:
+        def zero_func(x):
+            return 0
+        zero_func = np.vectorize(zero_func)
+        return zero_func
+    new_guess = (max(probabilities), params_guess[1], params_guess[2], min(controlled_variables))
+    # params, param_errs, _, _ = lab.fit(probabilities_fit_function, controlled_variables, probabilities, None,
+    #                                    (max(probabilities), params_guess[1], params_guess[2]))
+    #
+    # # Since extrapolation may return negative values, fix it by replacing them with zero
+    # def fit_func(x):
+    #     result_probability = probabilities_fit_function(params, x)
+    #     if result_probability > 0:
+    #         return result_probability
+    #     return 0
+    # fit_func = np.vectorize(fit_func)
+    #
+    # return fit_func
+
+
+def organize_probabilities(controlled_variable, probabilities):
+    """Organizes probabilities by event (p0, p1, p2...) rather than by experiment (board size)
+
+
+    Returns
+    -------
+    Dictionary of board sizes and probability value by probability indices
+    """
+    probabilities_dict = collections.defaultdict(list)
+    controlled_var_dict = collections.defaultdict(list)
+
+    # Extract data from all executions to lists indexed by the probability (rather than by experiment which is how the
+    # raw data is sorted)
+    # j indexes the different executions
+    for j, distribution in enumerate(probabilities):
+        # i indexes probabilities inside a specific execution
+        for i, probability in enumerate(distribution):
+            probabilities_dict[i].append(probability)
+            controlled_var_dict[i].append(controlled_variable[j])
+
+    return controlled_var_dict, probabilities_dict
+
+
+def fit_probabilities(controlled_variable, probabilities):
+    """Finds a fit for probabilities of each event (p0, p1, p2...) as function of controlled variable
+
+    Returns
+    -------
+    List of functions returning estimated probability at a certain controlled variable value:
+    [p_0, p_1, p_2...] - p_i(controlled_value) returns the probability of i-th event at controlled_value
+    """
+    # Find fits for the different events as function of board size
+    controlled_var_dict, probabilities_dict = organize_probabilities(controlled_variable, probabilities)
+    probability_funcs = []
+    for probability_index in probabilities_dict.keys():
+        func = interpolate_probability(controlled_var_dict[probability_index],
+                                               probabilities_dict[probability_index])
+        probability_funcs.append(func)
+    return probability_funcs
+
+
+def plot_probabilities(controlled_variable, probabilities, xtitle, show_p0=True, is_num_hexbugs=False,
+                       params_guess=(0.1, 0.1, 0.01)):
     """ Plots probabilities for first cell being blocked, first free but second blocked
-    etc. as function of controlled variable. See plot_information for full documentation
+    etc. as function of controlled variable. See plot_information for full documentation.
 
     Parameters
     ----------
@@ -535,73 +620,87 @@ def plot_probabilities(controlled_variable, probabilities, xtitle,
     is_num_hexbugs : whether controlled_variable is number of hexbugs (or another parameter
                      such as board size). If True, the expected value if hexbugs were independent
                      will be plotted)
+
+    Returns
+    ----------
+    List of functions of interpolated probabilities as function of controlled variable (p0, p1, p2...)
     """
-    probabilities_dict = collections.defaultdict(list)
-    controlled_var_dict = collections.defaultdict(list)
-
-    if is_num_hexbugs:
-        one_hexbug_probabilities = []
-
-    # j indexes the different executions
-    for j, distribution in enumerate(probabilities):
-        if j == 1:
-            one_hexbug_probabilities = distribution
-
-        # i indexes probabilities inside a specific execution
-        for i, probability in enumerate(distribution):
-            probabilities_dict[i].append(probability)
-            controlled_var_dict[i].append(controlled_variable[j])
+    controlled_var_dict, probabilities_dict = organize_probabilities(controlled_variable, probabilities)
 
     # Keys here are p0, p1, p2, ...
-    plots = []
+    interpolated_funcs = []
     for probability_index in probabilities_dict.keys():
         if not show_p0 and probability_index == 0:
             continue
         p = plt.plot(controlled_var_dict[probability_index], probabilities_dict[probability_index], ".",
                      label=f"p{probability_index}")
+        interpolated = interpolate_probability(controlled_var_dict[probability_index],
+                                               probabilities_dict[probability_index],
+                                               params_guess)
+        # Plot interpolation
+        data_range = np.linspace(100,
+                                 max(controlled_var_dict[probability_index]),
+                                 1000)
+        interpolated = interpolated(data_range)
+        interpolated_funcs.append(interpolated)
+        plt.plot(data_range, interpolated, "--", color=p[0].get_color(), label=f"p{probability_index} (fit)")
+        plt.plot()
+
         if is_num_hexbugs:
             # Plot expected probability if hexbugs were independent
+            # Formula is explained here:
+            # https://trello-attachments.s3.amazonaws.com/5f55ec77266d3d5d8c7f40dc/5f55ed343da4ba75b16c11c0/0abd5aa3c50e4832edfd54174957961e/image.png
             allowed_area = 1 - ((probability_index + 1) / len(probabilities_dict))
-            # c here is the number of hexbugs
-            expected = [(allowed_area ** (c-1)) * (c / len(probabilities_dict)) for c in controlled_var_dict[probability_index]]
-            # Sort by controlled variable
-            sort_list = list(zip(controlled_var_dict[probability_index], expected))
-            sort_list.sort()
-            num_hexbugs = [x for x, y in sort_list]
-            expected = [y for x, y in sort_list]
-            plt.plot(num_hexbugs,
+            # This is the probability of bugs not being in the
+            x_data = np.linspace(min(controlled_var_dict[probability_index]), max(controlled_var_dict[probability_index]),
+                                 1000)
+            expected = [(allowed_area ** (c - 1)) * (c / len(probabilities_dict)) for c in x_data]
+            plt.plot(x_data,
                      expected,
                      "--+", color=p[0].get_color(),
-                     label=f"p{probability_index} (expected)")
+                     label=f"p{probability_index} (naive)")
 
     plt.legend(bbox_to_anchor=(1.05, 1))
     plt.title("Probabilities of amount of first consecutive free cells")
     plt.ylabel("Probability")
     plt.xlabel(xtitle)
     # plt.semilogy()
+    plt.tight_layout()
     plt.savefig(f"Probabilities_to_{xtitle}.png")
     plt.show()
+
+    return interpolated_funcs
 
 
 def plot_cumulative_probabilities(controlled_variable, cumulative_counts,
                                   show_p0=True):
-    """Plots the cumulative probability of each case as function of time
+    """Plots the cumulative probability of each case as function of time as well as differences series of the probabilities
 
     Parameters
     ----------
     cumulative_counts
     """
+    fig, axs = plt.subplots(2, sharex=True, figsize=(15, 10))
+
     for key, cumulative_counts in cumulative_counts.items():
         if not show_p0 and key == 0:
             continue
         num_frames = len(cumulative_counts)
         times = np.linspace(0, num_frames / FPS, num_frames)
         probabilities = [count / (frame_index + 1) for frame_index, count in enumerate(cumulative_counts)]
-        plt.plot(times, probabilities, label=f"p{key}")
-    plt.legend()
-    plt.title(f"Cumulative probabilities for {controlled_variable}")
-    plt.ylabel("Probability")
+        diffs = np.abs(np.diff(probabilities))
+        axs[0].plot(times, probabilities, label=f"p{key}")
+        axs[0].set_ylabel("Probability")
+        # The differences series has one item less
+        axs[1].plot(times[1:], diffs, ".", label=f"p{key} differences", markersize=5)
+        axs[1].set_ylabel("Differences")
+
+    axs[0].legend(bbox_to_anchor=(1.05, 1))
+    axs[1].legend(bbox_to_anchor=(1.05, 1))
+    axs[1].semilogy()
     plt.xlabel("Time (sec)")
+    fig.suptitle(f"Cumulative probabilities for {controlled_variable}")
+
     path = os.path.join("cumulative", f"{str(controlled_variable)}.png")
     # Don't override existing
     if os.path.isfile(path):
@@ -629,3 +728,63 @@ def split_correlations(analysis_results, title):
     correlations = [autocorrelations(r) for r in sub_experiments]
     correlation_fits = [fourier_peak_fit(c[1], True, f"{title} {i}", 2) for i, c in enumerate(correlations)]
     correlation_fit_trends(correlation_fits, range(len(correlation_fits)), "Length (cm)")
+
+
+def simulate_experiment(length_to_info, lengths, probabilities, covergence_limit=10**-3):
+    """Calculates the expected average information for a full compression of the board, starting with the largest length
+    and continuing to smaller boards sizes in steps of CELL_WIDTH pixels up to the smallest size in lengths.
+    The weighted average information gained per board size is calculated recursively in a dynamic-programming (bottom-up)
+    manner.
+
+    Parameters
+    ----------
+    length_to_info : function
+        a function receiving length and returning the interpolated information for that length.
+    lengths : list
+        measured lengths
+    probabilities : list
+        list of distributions matching the measurements in lengths
+    covergence_limit : float
+        smallest barrier movement distance to be considered. Board will stop being compressed when distance differences
+        reach this value.
+
+    Returns
+    -------
+    The total information that is expected to be measured in a single experiment.
+    """
+    total_info = 0
+    # Average distance barrier is moved per step until reaching the minimal distance
+    distance_diffs = []
+    distance_diffs_stdevs = []
+    # Information at each position of the barrier
+    info_per_step = []
+    # Board sizes at each step
+    board_lengths = []
+
+    probability_functions = fit_probabilities(lengths, probabilities)
+    move_distances = np.arange(len(probability_functions)) * CELL_WIDTH
+
+    current_length = max(lengths)
+    current_diff = 100
+    while current_diff > covergence_limit and current_length > CELL_WIDTH:
+        # Calculate the average distance the board will now move
+        current_probabilities = np.array([f(current_length) for f in probability_functions])
+        # Only allow to move the board to positive board sizes
+        allowed_indices = np.where(move_distances < current_length - CELL_WIDTH)
+
+        # Reached size in which all probabilities were extrapolated to be 0 (or board too small to move)
+        if len(allowed_indices) == 0 or sum(current_probabilities) == 0:
+            break
+
+        board_lengths.append(current_length)
+        info_per_step.append(length_to_info(current_length))
+
+        current_probabilities = current_probabilities[allowed_indices]
+        current_move_distances = move_distances[allowed_indices]
+        current_diff = np.average(current_move_distances, weights=current_probabilities)
+        distance_diffs.append(current_diff)
+        diff_stdev = np.sqrt(np.average((current_move_distances-current_diff)**2, weights=current_probabilities))
+        distance_diffs_stdevs.append(diff_stdev)
+        current_length -= current_diff
+
+    return board_lengths, info_per_step, distance_diffs, distance_diffs_stdevs
