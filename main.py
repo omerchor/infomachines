@@ -45,9 +45,10 @@ if __name__ == "__main__":
                      # groups=["Board Size", "Num Hexbugs"],
                      # group_sizes=[len(board_sizes_files), len(num_hexbugs_files)])
     #%%
-    plot_probabilities(lengths, probabilities, xtitle, show_p0=False, is_num_hexbugs=(xtitle == "Number of hexbugs"))
-    # for i, c in enumerate(cumulative_counts):
-    #     plot_cumulative_probabilities(lengths[i], c)
+    plot_probabilities(lengths, probabilities, xtitle, show_p0=False,
+                       is_num_hexbugs=(xtitle == "Number of hexbugs"))
+    for i, c in enumerate(cumulative_counts):
+        plot_cumulative_probabilities(lengths[i], c)
 # %%
 # Fit the first peak of each autocorrelation graph to a Gaussian
 # correlation_fits = [fourier_peak_fit(c[1], False, files[i], 2) for i, c in enumerate(correlations)]
