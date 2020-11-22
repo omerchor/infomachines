@@ -11,9 +11,9 @@ import skimage.transform
 # %%
 CELLS_RATIO = 15
 #%%
-DIRNAME = "stks"  # "num_hexbugs_stks"
-# DIRNAME = "num_hexbugs_stks"
-files = os.listdir(DIRNAME)
+# DIRNAME = "stks"  # "num_hexbugs_stks"
+DIRNAME = "num_hexbugs_stks"
+files = [f for f in os.listdir(DIRNAME) if f.endswith(".mat")]
 files.sort()
 
 
@@ -102,7 +102,7 @@ if __name__ == "__main__":
         # vmax can be used to add a maximal value - the laser is sometimes detected in the
         # image, making the area near the moving wall appear significantly busier
         im = axs[i // num_columns, i % num_columns].imshow(item, interpolation='gaussian',
-                                                           cmap='inferno', vmax=0.7)
+                                                           cmap='inferno', vmax=1)
         axs[i // num_columns, i % num_columns].set_title(unique_filenames[i])
 
     # Add colorbar

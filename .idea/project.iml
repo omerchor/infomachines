@@ -2,6 +2,12 @@
 <module type="PYTHON_MODULE" version="4">
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/autocorrelations" />
+      <excludeFolder url="file://$MODULE_DIR$/cumulative" />
+      <excludeFolder url="file://$MODULE_DIR$/cumulative_board_size" />
+      <excludeFolder url="file://$MODULE_DIR$/cumulative_num_hexbugs" />
+      <excludeFolder url="file://$MODULE_DIR$/num_hexbugs_stks" />
+      <excludeFolder url="file://$MODULE_DIR$/stks" />
       <excludeFolder url="file://$MODULE_DIR$/venv" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.8" jdkType="Python SDK" />

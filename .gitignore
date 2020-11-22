@@ -1,2 +1,4 @@
 *.mat
 *.png
+*_fit_params.csv
+*_goodness_of_fit.csv
