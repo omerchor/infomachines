@@ -141,7 +141,8 @@ def plot(func, params_list, x_data, y_data, y_errs, x_errs=None, is_discrete=Fal
     fig, axes = plt.subplots(nrows=2) 
     
     # Plot data with errors and the fit
-    axes[0].errorbar(x_data, y_data, y_errs, xerr=x_errs, **plot_args)
+    axes[0].errorbar(x_data, y_data, y_errs, xerr=x_errs,
+                     label="data", **plot_args)
     if is_discrete:
         fit_range = range(floor(min(x_data)), ceil(max(x_data)), 1)
     else:
@@ -151,15 +152,17 @@ def plot(func, params_list, x_data, y_data, y_errs, x_errs=None, is_discrete=Fal
         params_list = params_list.tolist()
     fitted_data = np.asarray([func(params_list, i) for i in fit_range])
 
-    axes[0].plot(fit_range, fitted_data, "--")
+    axes[0].plot(fit_range, fitted_data, "-", label="fit")
     
     axes[0].set_xlabel(xlabel)
     axes[0].set_ylabel(ylabel)
     axes[0].set_title(title)
+    axes[0].legend()
     
     # Plot residulas
     res = residuals(func, x_data, y_data, *params_list)
-    axes[1].errorbar(x_data, res, fmt=".", xerr=x_errs, yerr=y_errs)
+    axes[1].errorbar(x_data, res, fmt=".", xerr=x_errs, yerr=y_errs, alpha=0.1,
+                     markersize=2)
     axes[1].plot([min(x_data), max(x_data)], [0,0], ":", color="grey")
     axes[1].set_xlabel(xlabel)
     axes[1].set_ylabel(ylabel)
