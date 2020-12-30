@@ -96,16 +96,17 @@ def save_table(func, name, header, rows):
         print(f"Can't save fit results for {name} to file")
 
 
-def print_fit(func, params, param_errs, reduced_chi_squared, p_value):
-    print("Fit values for {}".format(func.__name__))
+def print_fit(func, params, param_errs, reduced_chi_squared, p_value, do_print=False):
     header = ['Parameters', 'Values', 'Errors']
     rows = [["a[{}]".format(i+1), params[i], param_errs[i]] for i in range(len(params))]
     table = tabulate(rows, headers=header)
-    print(table)
-    print("Chi sqaured reduced:", reduced_chi_squared)
-    print("P-value:", p_value)
-    # Export to file
-    save_table(func, "fit_params", header, rows)
+    if do_print:
+        print("Fit values for {}".format(func.__name__))
+        print(table)
+        print("Chi sqaured reduced:", reduced_chi_squared)
+        print("P-value:", p_value)
+        # Export to file
+        save_table(func, "fit_params", header, rows)
 
 
 def save_goodness_of_fit(func, reduced_chi_squared, p_value):
@@ -120,7 +121,7 @@ def odr(func, x_data, y_data, y_errs, params_guess=None, delta_dof=0, x_errs=Non
     return fit
 
 
-def fit(func, x_data, y_data, y_errs, params_guess=None, delta_dof=0, x_errs=None):
+def fit(func, x_data, y_data, y_errs, params_guess=None, delta_dof=0, x_errs=None, do_print=False):
     """
     Find best fit for func with measured y_data for x_data values, with errors on y axis.
     """
@@ -132,8 +133,9 @@ def fit(func, x_data, y_data, y_errs, params_guess=None, delta_dof=0, x_errs=Non
     dof = len(x_data) - len(params) - delta_dof
     chi_squared = reduced_chi_squared * dof
     p_value = chi2.sf(chi_squared, len(x_data) - len(params) - delta_dof)
-    print_fit(func, params, param_errs, reduced_chi_squared, p_value)
-    save_goodness_of_fit(func, reduced_chi_squared, p_value)
+    if do_print:
+        print_fit(func, params, param_errs, reduced_chi_squared, p_value)
+        save_goodness_of_fit(func, reduced_chi_squared, p_value)
     return params, param_errs, reduced_chi_squared, p_value
 
 
@@ -161,7 +163,7 @@ def plot(func, params_list, x_data, y_data, y_errs, x_errs=None, is_discrete=Fal
     
     # Plot residulas
     res = residuals(func, x_data, y_data, *params_list)
-    axes[1].errorbar(x_data, res, fmt=".", xerr=x_errs, yerr=y_errs, alpha=0.1,
+    axes[1].errorbar(x_data, res, fmt=".", xerr=x_errs, yerr=y_errs,
                      markersize=2)
     axes[1].plot([min(x_data), max(x_data)], [0,0], ":", color="grey")
     axes[1].set_xlabel(xlabel)
