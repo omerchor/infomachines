@@ -11,6 +11,17 @@ from matplotlib import pyplot as plt
 import scipy.signal
 from contextlib import contextmanager
 
+
+def as_si(x, ndp=2):
+    s = '{x:0.{ndp:d}e}'.format(x=x, ndp=ndp)
+    m, e = s.split('e')
+    return r'{m:s}\times 10^{{{e:d}}}'.format(m=m, e=int(e))
+
+
+PIXEL_TO_METER_720P = (59/900)*(10**(-2))
+BARRIER_MASS = 58.12 * 10**-3
+
+
 # Channel indices
 BLUE = 0
 GREEN = 1
@@ -207,8 +218,8 @@ def get_terminal_velocity(times, widths, position_plot=None,
     -------
 
     """
-    # smooth positons
-    widths = np.array(widths)
+    print(filename)
+    widths = np.array(widths) * PIXEL_TO_METER_720P
     velocity = np.diff(widths) / np.diff(times)
     acceleration = np.diff(velocity) / np.diff(times)[:-1]
 
@@ -218,7 +229,8 @@ def get_terminal_velocity(times, widths, position_plot=None,
     # movement_indices = np.where((velocity[:-1] > 50) &
     #                             (acceleration < 200) & (acceleration > -200))
     # movement_indices = np.arange(np.min(movement_indices), np.max(movement_indices))
-    movement_indices = np.arange(np.where(widths > 200)[0][0], np.where(widths > 500)[0][0])
+    movement_indices = np.arange(np.where(widths > 200*PIXEL_TO_METER_720P)[0][0],
+                                 np.where(widths > 500*PIXEL_TO_METER_720P)[0][0])
     times = times[movement_indices]
     widths = widths[movement_indices]
 
@@ -267,51 +279,68 @@ def main():
         for weight, weight_files in files.items():
             results[weight] = p.map(analyze_video, weight_files)
 
-        for weight, weight_results in results.items():
-            if len(weight_results) == 0:
-                continue
+    for weight, weight_results in results.items():
+        if len(weight_results) == 0:
+            continue
 
-            fig, axs = plt.subplots(3, 1, sharex=True)
-            # fig2, ax_acceleration_velocity = plt.subplots()
+        fig, axs = plt.subplots(3, 1, sharex=True)
+        # fig2, ax_acceleration_velocity = plt.subplots()
 
-            terminal_velocities[weight] = [get_terminal_velocity(times, widths,
-                                                                 axs[0], axs[1], axs[2],
-                                                                 #ax_acceleration_velocity,
-                                                                 filename=files[weight][i])
-                                           for i, (times, widths) in enumerate(weight_results)]
-            velocities = np.array([x[0] for x in terminal_velocities[weight]])
-            errs = [1/x[1] for x in terminal_velocities[weight]]
-            weights.append(weight)
-            terminal_velocity = np.average(velocities, weights=errs)
-            terminal_velocities_list.append(terminal_velocity)
-            terminal_velocities_errs.append(np.sqrt(np.average(velocities**2 - terminal_velocity**2,
-                                            weights=errs)) / len(velocities))
+        terminal_velocities[weight] = [get_terminal_velocity(times, widths,
+                                                             axs[0], axs[1], axs[2],
+                                                             #ax_acceleration_velocity,
+                                                             filename=files[weight][i])
+                                       for i, (times, widths) in enumerate(weight_results)]
+        velocities = np.array([x[0] for x in terminal_velocities[weight]])
+        errs = [1/x[1] for x in terminal_velocities[weight]]
+        weights.append(weight)
+        terminal_velocity = np.average(velocities, weights=errs)
+        terminal_velocities_list.append(terminal_velocity)
+        terminal_velocities_errs.append(np.sqrt(np.average(velocities**2 - terminal_velocity**2,
+                                        weights=errs)) / len(velocities))
 
-            axs[0].set_title("Width")
-            axs[1].set_title("Velocity")
-            axs[2].set_title("Acceleration")
-            axs[2].set_xlabel("Time [sec]")
-            axs[0].set_ylabel("Width [pixels]")
-            axs[1].set_ylabel(r"Velocity [$\frac{pixels}{sec}$]")
-            axs[2].set_ylabel(r"Acceleration [$\frac{pixels}{sec^2}$]")
-            # fig.legend()
+        axs[0].set_title("Width")
+        axs[1].set_title("Velocity")
+        axs[2].set_title("Acceleration")
+        axs[2].set_xlabel("Time [sec]")
+        axs[0].set_ylabel("Width [m]")
+        axs[1].set_ylabel(r"Velocity [$\frac{m}{sec}$]")
+        axs[2].set_ylabel(r"Acceleration [$\frac{m}{sec^2}$]")
+        # fig.legend()
 
-            fig.suptitle(f"Expansion with {weight:.2f}g weight")
-            print("plotting", weight)
-            fig.show()
+        fig.suptitle(f"Expansion with {weight:.2f}g weight")
+        print("plotting", weight)
+        fig.show()
 
-            # ax_acceleration_velocity.set_xlabel("Velocity [pixels / sec]")
-            # ax_acceleration_velocity.set_ylabel("Acceleration [pixels / sec$^2$]")
-            # fig2.suptitle(f"Acceleration vs. Velocity with {weight:.2f}g weight")
-            # fig2.show()
+        # ax_acceleration_velocity.set_xlabel("Velocity [pixels / sec]")
+        # ax_acceleration_velocity.set_ylabel("Acceleration [pixels / sec$^2$]")
+        # fig2.suptitle(f"Acceleration vs. Velocity with {weight:.2f}g weight")
+        # fig2.show()
 
-        print(f"Elapsed {time.time() - t:.2f} seconds")
+    print(f"Elapsed {time.time() - t:.2f} seconds")
 
-        plt.clf()
-        plt.errorbar(weights, terminal_velocities_list, terminal_velocities_errs, fmt=".")
-        plt.xlabel("Weight [gram]")
-        plt.ylabel("Terminal Velocity [pixel/sec]")
-        plt.show()
+    plt.clf()
+    plt.errorbar(weights, terminal_velocities_list, terminal_velocities_errs, fmt=".")
+    plt.xlabel("Weight [gram]")
+    plt.ylabel("Terminal Velocity [m/sec]")
+    plt.show()
+
+    weights_kg = np.array(weights) / 1000
+    params, param_errs, reduced_chi_squared, p_value = lab.fit(func=line,
+                                                               x_data=weights_kg,
+                                                               y_data=terminal_velocities_list,
+                                                               y_errs=terminal_velocities_errs,
+                                                               params_guess=(1, 1))
+    lab.plot(line, params, weights_kg, terminal_velocities_list, terminal_velocities_errs, fmt=".",
+             xlabel="Weight [gram]", ylabel="Terminal Velocity [m/sec]",
+             title=f"$v=\\frac{{g}}{{\\gamma}} m = ({params[0]:.2f}\\pm{param_errs[0]:.2f}) mass$\n"
+                   f"$\\gamma\\approx {as_si(9.8 * 1/(params[0]))} \\frac{{kg}}{{s}}$")
+    print(reduced_chi_squared)
+    print(f"$gamma= {9.8 * 1/(params[0]):.2e} kg/s$")
+    plt.show()
+
+
+
 
     # get_average_expansion(results)
 
