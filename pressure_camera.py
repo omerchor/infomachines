@@ -21,6 +21,16 @@ def as_si(x, ndp=2):
 PIXEL_TO_METER_720P = (59/900)*(10**(-2))
 BARRIER_MASS = 58.12 * 10**-3
 
+# frame = frame[:230, 150:500]
+# frame = frame[30:480, 310:980]
+IS_360 = True
+YMIN = 0 if IS_360 else 30
+YMAX = 230 if IS_360 else 480
+XMIN = 150 if IS_360 else 310
+XMAX = 500 if IS_360 else 980
+
+COLOR_RANGE_MIN = [120, 180, 120] if IS_360 else [120, 100, 100]
+COLOR_RANGE_MAX = [130, 255, 255] if IS_360 else [130, 255, 255]
 
 # Channel indices
 BLUE = 0
@@ -47,10 +57,8 @@ def analyze_frame(frame):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
     # define range of blue color in HSV
-    # barrier_color_lower = np.array([120, 100, 100])
-    # barrier_color_upper = np.array([130, 255, 255])
-    barrier_color_lower = np.array([120, 100, 100])
-    barrier_color_upper = np.array([130, 255, 255])
+    barrier_color_lower = np.array(COLOR_RANGE_MIN)
+    barrier_color_upper = np.array(COLOR_RANGE_MAX)
 
 
     # Threshold the HSV image to get only blue colors
@@ -77,10 +85,9 @@ def analyze_video(path, show=False):
                 break
 
             # Crop frame [y, x]
-            # frame = frame[:230, 150:500]
-            RESOLUTION_FACTOR = 2
-            frame = frame[30:480, 310:980]
-            frame = cv2.flip(frame, 1)
+            frame = frame[YMIN:YMAX, XMIN:XMAX]
+            if not IS_360:
+                frame = cv2.flip(frame, 1)
             try:
                 arena_width, barrier_position, mask = analyze_frame(frame)
             # This happens due to the mask finding no pixels at all. Might happen in a few frames
@@ -89,7 +96,7 @@ def analyze_video(path, show=False):
                 continue
             # Ignore very large barrier movements - they are probably just a mistake
             # if len(widths) > 1 and (widths[-1] - arena_width > 5 or widths[-1] - arena_width < -5):
-            if len(widths) > 1 and (np.abs(widths[-1] - arena_width) > 100):
+            if len(widths) > 1 and (np.abs(widths[-1] - arena_width) > 5):
                 print(f"{path}: skipped frame")
                 if show:
                     cv2.putText(frame, "skipped",
@@ -100,7 +107,7 @@ def analyze_video(path, show=False):
                                 2)
                     cv2.imshow('frame', frame)
                     cv2.imshow('res', res)
-                    time.sleep(0.1)
+                    # time.sleep(0.001)
                     k = cv2.waitKey(5) & 0xFF
                     if k == 27:
                         break
@@ -119,7 +126,7 @@ def analyze_video(path, show=False):
             if show:
                 cv2.imshow('frame', frame)
                 cv2.imshow('res', res)
-                time.sleep(0.1)
+                time.sleep(0.001)
                 k = cv2.waitKey(5) & 0xFF
                 if k == 27:
                     break
@@ -131,7 +138,11 @@ def analyze_video(path, show=False):
         cv2.destroyAllWindows()
 
     print(f"{os.path.basename(path)}: {len(widths) / fps:.2f} sec")
-    return np.arange(0, len(widths)) / fps, widths
+    times = np.arange(0, len(widths)) / fps
+    np.save(f"{os.path.basename(path)}_times", times)
+    np.save(os.path.join(os.path.split(path)[0],
+                         f"{os.path.basename(path)}_widths"), widths)
+    return times, widths
 
 
 def get_average_expansion(results):
@@ -191,7 +202,7 @@ def get_average_expansion(results):
 
     plt.xlabel("Time [sec]")
     plt.ylabel("Arena width [pixels]")
-    plt.title(f"Free expansion of hexbugs (ensemble size: {len(files)})")
+    plt.title(f"Free expansion of hexbugs (ensemble size: {len(results)})")
     plt.legend()
     plt.show()
 
@@ -254,21 +265,14 @@ def get_terminal_velocity(times, widths, position_plot=None,
     return params[0], param_errs[0]
 
 
-def main():
+def analyze_weights():
     weigths_dirs = os.listdir(VIDEOS_PATH)
     files = {}
     for d in weigths_dirs:
         current_dir = os.path.join(VIDEOS_PATH, d)
         files[float(d)] = [os.path.join(current_dir, f) for f in os.listdir(current_dir) if f.endswith(".mp4")]
-    # files = [os.path.join(VIDEOS_PATH, w, f) for f in os.listdir(VIDEOS_PATH) if f.endswith(".mp4")]
-    # analyze_video(r"C:\Users\OmerChor\Pictures\Camera Roll\weights\30.45\WIN_20201230_14_56_51_Pro.mp4",
-    #                   True)
-    # return
-    #
-    #
-    # results = []
+
     with Pool(8) as p:
-        # results = p.map(analyze_video, files)
         results = {}
         terminal_velocities = {}
         weights = []
@@ -288,16 +292,16 @@ def main():
 
         terminal_velocities[weight] = [get_terminal_velocity(times, widths,
                                                              axs[0], axs[1], axs[2],
-                                                             #ax_acceleration_velocity,
+                                                             # ax_acceleration_velocity,
                                                              filename=files[weight][i])
                                        for i, (times, widths) in enumerate(weight_results)]
         velocities = np.array([x[0] for x in terminal_velocities[weight]])
-        errs = [1/x[1] for x in terminal_velocities[weight]]
+        errs = [1 / x[1] for x in terminal_velocities[weight]]
         weights.append(weight)
         terminal_velocity = np.average(velocities, weights=errs)
         terminal_velocities_list.append(terminal_velocity)
-        terminal_velocities_errs.append(np.sqrt(np.average(velocities**2 - terminal_velocity**2,
-                                        weights=errs)) / len(velocities))
+        terminal_velocities_errs.append(np.sqrt(np.average(velocities ** 2 - terminal_velocity ** 2,
+                                                           weights=errs)) / len(velocities))
 
         axs[0].set_title("Width")
         axs[1].set_title("Velocity")
@@ -334,15 +338,27 @@ def main():
     lab.plot(line, params, weights_kg, terminal_velocities_list, terminal_velocities_errs, fmt=".",
              xlabel="Weight [gram]", ylabel="Terminal Velocity [m/sec]",
              title=f"$v=\\frac{{g}}{{\\gamma}} m = ({params[0]:.2f}\\pm{param_errs[0]:.2f}) mass$\n"
-                   f"$\\gamma\\approx {as_si(9.8 * 1/(params[0]))} \\frac{{kg}}{{s}}$")
+                   f"$\\gamma\\approx {as_si(9.8 * 1 / (params[0]))} \\frac{{kg}}{{s}}$")
     print(reduced_chi_squared)
-    print(f"$gamma= {9.8 * 1/(params[0]):.2e} kg/s$")
+    print(f"$gamma= {9.8 * 1 / (params[0]):.2e} kg/s$")
     plt.show()
 
 
+def analyze_expansion():
+    videos_path = r"C:\Users\OmerChor\Pictures\Camera Roll\wheels"
+    files = [os.path.join(videos_path, f) for f in os.listdir(videos_path) if f.endswith(".mp4")]
+    with Pool(8) as p:
+        results = p.map(analyze_video, files)
+    get_average_expansion(results)
 
 
-    # get_average_expansion(results)
+def show_video(path):
+    analyze_video(path, True)
+
+
+def main():
+    analyze_expansion()
+    # show_video(r'C:\Users\OmerChor\Pictures\Camera Roll\wheels\WIN_20201216_10_54_36_Pro.mp4')
 
 
 if __name__ == "__main__":

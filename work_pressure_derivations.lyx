@@ -1,0 +1,167 @@
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\begin_preamble
+\usepackage{braket}
+\end_preamble
+\use_default_options true
+\maintain_unincluded_children false
+\language hebrew
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "lmodern" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry true
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_minted 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\leftmargin 2.54cm
+\topmargin 2.54cm
+\rightmargin 2.54cm
+\bottommargin 2.54cm
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+משוואת כוחות – התפשטות עם משקולת
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{align*}
+F & =ma=mg-\gamma v\\
+\gamma & =\frac{mg}{v_{t}}\\
+v_{t} & =\frac{g}{\gamma}m\\
+\gamma v & =\frac{kg\ m}{s^{2}}\\
+\gamma & =\frac{kg}{s}
+\end{align*}
+
+\end_inset
+
+משוואת כוחות – הקסבאגז דוחפים
+\begin_inset Formula 
+\begin{align*}
+F & =PA-\gamma v=ma\\
+P & =\frac{ma+\gamma v}{A}\\
+ & =\frac{}{}
+\end{align*}
+
+\end_inset
+
+התאמה של המיקום של המחיצה כתלות בזמן )הקסבאגז דוחפים(
+\begin_inset Formula 
+\begin{align*}
+x & =b_{0}+b_{2}t^{b_{1}}\\
+v & =b_{2}b_{1}t^{b_{1}-1}\\
+t & =\left(\frac{x-b_{0}}{b_{2}}\right)^{1/b_{1}}\\
+\text{d}t & =\frac{1}{b_{1}}\left(\frac{x-b_{0}}{b_{2}}\right)^{1/b_{1}-1}\text{d}x\\
+\text{d}x & =b_{1}\left(\frac{b_{2}}{b_{2}t^{b_{1}}}\right)^{1/b_{1}-1}\text{d}t\\
+ & =b_{1}\left(t^{b_{1}-1}\right)\text{d}t\\
+ & =b_{1}\left(\frac{b_{2}}{x-b_{0}}\right)^{1/b_{1}-1}\text{d}t
+\end{align*}
+
+\end_inset
+
+העבודה המתבצעת כנגד חיכוך:
+\begin_inset Formula 
+\begin{align*}
+W & =\int F\text{d}x\\
+ & =\int\gamma\frac{dx}{dt}\text{d}x\\
+ & =\gamma\int b_{2}b_{1}t^{b_{1}-1}b_{1}\left(t^{b_{1}-1}\right)\text{d}t\\
+ & =\frac{\gamma b_{2}b_{1}^{2}t^{2b_{1}-1}}{2b_{1}-1}\bigg|_{x_{0}}^{x}\\
+ & =\frac{\gamma b_{2}b_{1}^{2}\left(\frac{x-b_{0}}{b_{2}}\right)^{2-1/b_{1}}}{2b_{1}-1}-\frac{\gamma b_{2}b_{1}^{2}\left(\frac{x_{0}-b_{0}}{b_{2}}\right)^{2-1/b_{1}}}{2b_{1}-1}
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+גז אידאלי
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{align*}
+F=m\ddot{x} & =PA-\gamma\dot{x}\\
+PV & =Nk_{B}T\\
+P & =\frac{Nk_{B}T}{Ax}\\
+\\
+ & =\frac{\tilde{A}}{x}-\gamma\dot{x}\\
+\ddot{x} & =\frac{b}{x}-c\dot{x}\\
+z & =\left[\dot{x},x\right]\\
+\dot{z} & =\left[\ddot{x},\dot{x}\right]\\
+\dot{z}[1] & =z[0]\\
+\dot{z}[0]=\ddot{x} & =\frac{b}{z[1]}-cz[0]
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
