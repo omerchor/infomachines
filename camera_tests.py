@@ -1,20 +1,20 @@
+import math
 import time
 from functools import partial
 
 import imutils as imutils
 import numpy as np
 import cv2
-from matplotlib import pyplot as plt, animation
-from contextlib import contextmanager
 import pims
+import skimage
 import trackpy as tp
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib.backends.backend_template import FigureCanvas
-from skimage.measure import label, regionprops, regionprops_table
-import math
-from scipy import ndimage
-from skimage import morphology, util, filters
 
+from skimage import data
+from skimage.filters import threshold_otsu
+from skimage.segmentation import clear_border
+from skimage.measure import label, regionprops
+from skimage.morphology import closing, square, erosion, skeletonize, convex_hull, opening, remove_small_objects
+from skimage.color import label2rgb
 
 tp.enable_numba()
 
@@ -53,7 +53,7 @@ def evaluate_frame(frame):
     # Our operations on the frame come here
     fgmask = fgbg.apply(frame)
     # gray = cv2.cvtColor(crop(frame), cv2.COLOR_BGR2GRAY)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     shadows = np.where(fgmask == 127)
     fgmask[shadows] = 0
@@ -77,12 +77,13 @@ def evaluate_frame(frame):
 
     # cv2.imshow('foreground', frame)
 
-    label_img = label(fgmask)
+    # bw = closing(fgmask > 1, square(3))
+    cleared = erosion(fgmask)
+    label_img = label(cleared)
+    label_img = remove_small_objects(label_img, min_size=100)
     regions = regionprops(label_img)
 
-    fig, ax = plt.subplots()
-    ax.imshow(foreground, cmap=plt.cm.gray)
-
+    frame = foreground
     for props in regions:
         y0, x0 = props.centroid
         orientation = props.orientation
@@ -91,19 +92,13 @@ def evaluate_frame(frame):
         x2 = x0 - math.sin(orientation) * 0.5 * props.major_axis_length
         y2 = y0 - math.cos(orientation) * 0.5 * props.major_axis_length
 
-        ax.plot((x0, x1), (y0, y1), '-r', linewidth=2.5)
-        ax.plot((x0, x2), (y0, y2), '-r', linewidth=2.5)
-        ax.plot(x0, y0, '.g', markersize=15)
-
         minr, minc, maxr, maxc = props.bbox
-        bx = (minc, maxc, maxc, minc, minc)
-        by = (minr, minr, maxr, maxr, minr)
-        ax.plot(bx, by, '-b', linewidth=2.5)
+        cv2.circle(frame, (int(x0), int(y0)), 5, (255, 255, 255), thickness=-1, lineType=cv2.FILLED)
+        cv2.line(frame, (int(x0), int(y0)), (int(x1), int(y1)), (0, 255, 0))
+        cv2.line(frame, (int(x0), int(y0)), (int(x2), int(y2)), (0, 0, 255))
+        cv2.rectangle(frame, (minc, minr), (minc + maxc - minc, minr + maxr - minr), (0, 255, 0), 2)
 
-    fig.canvas.draw()
-    img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-    img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    return cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    return frame
 
 
 def get_frames(path):
@@ -134,13 +129,11 @@ def main():
                 # Capture frame-by-frame
                 ret, frame = cap.read()
                 im = evaluate_frame(frame)
-                cv2.imshow("result", im)
-
                 i += 1
-
                 # if i > 200:
+                cv2.imshow("result", im)
                 #     out.write(foreground)
-                # time.sleep(0.01)
+                time.sleep(0.1)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
         finally:
