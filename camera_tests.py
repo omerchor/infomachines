@@ -8,13 +8,18 @@ import cv2
 import pims
 import skimage
 import trackpy as tp
+from scipy import ndimage as ndi
 
-from skimage import data
-from skimage.filters import threshold_otsu
-from skimage.segmentation import clear_border
+from skimage import data, color, img_as_ubyte
+from skimage.draw import ellipse_perimeter
+from skimage.feature import canny, peak_local_max
+from skimage.filters import threshold_otsu, unsharp_mask
+from skimage.segmentation import clear_border, mark_boundaries, random_walker
 from skimage.measure import label, regionprops
 from skimage.morphology import closing, square, erosion, skeletonize, convex_hull, opening, remove_small_objects
+from skimage.segmentation import watershed
 from skimage.color import label2rgb
+from skimage.transform import hough_ellipse
 
 tp.enable_numba()
 
@@ -49,42 +54,34 @@ GREEN = 1
 RED = 2
 
 
-def evaluate_frame(frame):
-    # Our operations on the frame come here
+@pims.pipeline
+def gray(image, channel=0):
+    return image[:, :, channel]
+
+
+def evaluate_frame_trackpy(frame):
+    green = gray(frame, 1)
+    f = tp.locate(green, 31, percentile=95, threshold=15, characterize=False)
+    for i in f.iterrows():
+        cv2.circle(frame, (int(i[1][1]), int(i[1][0])), 5, (255, 255, 255), thickness=-1, lineType=cv2.FILLED)
+    return frame
+
+
+def evaluate_frame_label(frame):
     fgmask = fgbg.apply(frame)
-    # gray = cv2.cvtColor(crop(frame), cv2.COLOR_BGR2GRAY)
-    # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     shadows = np.where(fgmask == 127)
     fgmask[shadows] = 0
 
     foreground = cv2.bitwise_and(frame, frame, mask=fgmask)
-    # threshold = 50
-    # gray = cv2.blur(gray, (1, 1))
-    # canny_output = cv2.Canny(gray, threshold, threshold * 2, apertureSize=3)
-    #
-    # contours, hierarchy = cv2.findContours(canny_output, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    # # cnt = contours[4]
-    # img = cv2.drawContours(gray, contours, 0, (0, 255, 0), 3)
-
-    # cv2.imshow('foreground', foreground)
-    # cv2.imshow('canny', canny_output)
-    # cv2.imshow('contours', img)
-    # green = frame[:,:,1]
-    # f = tp.locate(green, 31, percentile=99)
-    # for j in f.iterrows():
-    #     cv2.circle(frame, (int(j[1][1]), int(j[1][0])), int(j[1][3]), 255, -1)
-
-    # cv2.imshow('foreground', frame)
-
-    # bw = closing(fgmask > 1, square(3))
-    cleared = erosion(fgmask)
-    label_img = label(cleared)
-    label_img = remove_small_objects(label_img, min_size=100)
+    label_img = label(fgmask)
+    label_img = remove_small_objects(label_img, min_size=150)
     regions = regionprops(label_img)
 
     frame = foreground
     for props in regions:
+        # if props.area < 150:
+        #     continue
         y0, x0 = props.centroid
         orientation = props.orientation
         x1 = x0 + math.cos(orientation) * 0.5 * props.minor_axis_length
@@ -122,18 +119,18 @@ def main():
         # cap.set(3, 640)
         # cap.set(4, 360)
         fourcc = cv2.VideoWriter_fourcc(*'DIVX')
-        out = cv2.VideoWriter('output.mov', fourcc, 20.0, (int(cap.get(3)), int(cap.get(4))))
+        out = cv2.VideoWriter('output.avi', fourcc, 20.0, (int(cap.get(3)), int(cap.get(4))))
         try:
             i = 0
-            while True:
+            while i < 800:
                 # Capture frame-by-frame
                 ret, frame = cap.read()
-                im = evaluate_frame(frame)
+                im = evaluate_frame_trackpy(frame)
                 i += 1
-                # if i > 200:
-                cv2.imshow("result", im)
-                #     out.write(foreground)
-                time.sleep(0.1)
+                if i > 100:
+                    cv2.imshow("result", im)
+                    out.write(im)
+                    # time.sleep(0.1)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
         finally:
