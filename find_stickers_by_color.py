@@ -1,5 +1,8 @@
+<<<<<<< HEAD
 import pprint
 
+=======
+>>>>>>> origin/master
 import cv2
 import time
 import numpy as np
@@ -230,6 +233,5 @@ if __name__ == "__main__":
 
     # Load trajectories directly and analyze
     tr = analyze_velocity()
-    # plot_velocity_hist(tr)
-    # plot_velocity_heatmap(tr)
-    plot_velocity_direction(tr)
+    plot_velocity_hist(tr)
+    # plot_velocity_heamap(tr)
