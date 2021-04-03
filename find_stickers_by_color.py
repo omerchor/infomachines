@@ -1,16 +1,14 @@
-<<<<<<< HEAD
-import pprint
+import itertools
 
-=======
->>>>>>> origin/master
 import cv2
 import time
 import numpy as np
 import pandas
 import trackpy
+from scipy.interpolate import griddata
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import seaborn
+from analyze_stk import correlation_peaks
 
 
 def detect_stickers(frame, hsv_min=(40, 50, 0), hsv_max=(85, 255, 255)):
@@ -87,7 +85,7 @@ def show_centers(frame, centers, sleep_time=0.0):
 def main():
     cap = cv2.VideoCapture(r"C:\Users\OmerChor\OneDrive - mail.tau.ac.il\University\Physics\Info_machines\project\1.mp4")
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
+    print(frame_count)
     ret = True
     frames = []
     frame_num = 0
@@ -153,8 +151,10 @@ def analyze_velocity():
         sub = sub[:-1]
         sub['dx'] = dvx
         sub['dy'] = dvy
-        # sub['velocity'] = np.sqrt(dvx**2 + dvy**2)
         sub['velocity'] = np.hypot(dvx, dvy)
+
+        # Velocity exactly 0 probably due to lag in video (?)
+        sub = sub[sub['velocity'] != 0]
 
         subs.append(sub)
 
@@ -176,25 +176,56 @@ def plot_velocity_hist(trajectories=None):
     plt.show()
 
 
-@np.vectorize
-def get_average_velocity(x, y):
-    return np.average(trajectories[(trajectories.x == x) & (trajectories.y == y)].velocity)
+def average_velocity(trajectories=None):
+    """
+    Return a matrix containing the average velocity at each position
 
-
-def plot_velocity_heatmap(trajectories=None):
+    """
     if trajectories is None:
         trajectories = pandas.read_pickle("trajectories_with_velocity")
 
-    heatmap = np.zeros((trajectories.y.max() - trajectories.y.min() + 1,
-                        trajectories.x.max() - trajectories.x.min() + 1,), dtype=float)
+    heatmap = trajectories.pivot_table("velocity", "y", "x", aggfunc="mean").to_numpy()
 
-    for i in set(trajectories.x):
-        for j in set(trajectories.y):
-            heatmap[j - trajectories.y.min()][i - trajectories.x.min()] = np.average(trajectories[(trajectories.x == i)
-                                                                        & (trajectories.y == j)].velocity)
+    # Interpolate missing values
+    x = np.arange(0, heatmap.shape[1])
+    y = np.arange(0, heatmap.shape[0])
+    heatmap = np.ma.masked_invalid(heatmap)
 
-    plt.imshow(heatmap)
-    plt.colorbar()
+    xx, yy = np.meshgrid(x, y)
+    # get only the valid values
+    x1 = xx[~heatmap.mask]
+    y1 = yy[~heatmap.mask]
+    newarr = heatmap[~heatmap.mask]
+
+    return griddata((x1, y1), newarr.ravel(), (xx, yy), method='nearest')
+
+
+    # xmin = trajectories.x.min()
+    # ymin = trajectories.y.min()
+    # for row in trajectories.iterrows():
+    #     velocity_sum[row['y'] - ymin][row['x'] - xmin] += row['velocity']
+    #     velocity_sum[row['y'] - ymin][row['x'] - xmin] += 1
+    #
+    # return velocity_sum / velocity_counts
+
+    # for x in set(trajectories.x):
+    #     for y in set(trajectories.y):
+    #         values = trajectories[(trajectories.x == x) & (trajectories.y == y)]
+    #         if len(values) > 0:
+    #             heatmap[y - trajectories.y.min()][x - trajectories.x.min()] = np.average(values.velocity)
+    #         else:
+    #             heatmap[y - trajectories.y.min()][x - trajectories.x.min()] = np.nan
+
+    # return heatmap
+
+
+def plot_velocity_heatmap(trajectories=None):
+    velocities = average_velocity(trajectories)
+    plt.matshow(velocities, vmin=0, vmax=35)
+    cbar = plt.colorbar(shrink=0.8)
+    cbar.set_label("velocity [px/s]")
+    plt.title("Mean velocity as function of position\n(interpolated)")
+    plt.tight_layout()
     plt.show()
 
 
@@ -208,18 +239,70 @@ def plot_velocity_direction(trajectories=None):
     angles = np.arctan2(filtered_trajectories.dy, filtered_trajectories.dx)
 
     ax = plt.subplot(111, polar=True)
-    bars = ax.hist(angles, bins=90)
+    ax.hist(angles, bins=90)
     plt.title("Distribution of velocity direction (with respect to x axis)")
     plt.show()
 
-    # heatmap = trajectories.pivot_table("velocity", "y", "x", aggfunc="mean", fill_value=-1)
-    # seaborn.heatmap(heatmap, robust=True)
-    # plt.title("Mean velocity as function of position")
-    # plt.show()
 
-    # Use cartesian to polar
-    # heatmap by regions
-    # Average autocorrelations (on all trajectories)
+def velocity_autocorrelation(trajectories):
+    velocity_lags = []
+    velocity_autocorrelations = []
+    angle_lags = []
+    angle_autocorrelations = []
+    # Each "particle" is a new trajectory (i.e. bug capsizes and reappears as a new object)
+    for particle in set(trajectories["particle"]):
+        current = trajectories[trajectories.particle == particle]
+        current_velocities = current.velocity
+        if len(current_velocities) > 100:
+            lags, autocorrs, _, _ = plt.acorr(current_velocities, maxlags=None, usevlines=False, alpha=0.2)
+            velocity_lags.append(lags)
+            velocity_autocorrelations.append(autocorrs)
+
+            angles = np.arctan2(current.dy, current.dx)
+            lags, autocorrs, _, _ = plt.acorr(angles, maxlags=None, usevlines=False, alpha=0.2)
+            angle_autocorrelations.append(autocorrs)
+            plt.clf()
+
+    # Plot velocities
+    cmap = plt.cm.get_cmap("hsv", len(set(trajectories["particle"])) + 1)
+    for i, particle in enumerate(set(trajectories["particle"])):
+        current_frames = trajectories[trajectories.particle == particle]
+        plt.plot(current_frames.frame - current_frames.frame.min(), current_frames.velocity, ".", color=cmap(i))
+
+    plt.ylim(0, 35)
+    plt.xlim(0, 100)
+    plt.title("Velocity as function of time")
+    plt.ylabel("Velocity [px/s]")
+    plt.xlabel("Time [frame]")
+    plt.show()
+
+    # Plot velocity autocorrelations
+    for i in range(len(velocity_lags)):
+        plt.plot(velocity_lags[i], velocity_autocorrelations[i], linewidth=0.5, color=cmap(i))
+
+    plt.xlim(0, 200)
+    plt.minorticks_on()
+    plt.title("Autocorrelation of velocities in different executions")
+    plt.xlabel("Lag [frames]")
+    plt.ylabel("Autocorrelation")
+    plt.show()
+
+    # Plot angle autocorrelations
+    for i in range(len(velocity_lags)):
+        plt.plot(velocity_lags[i], angle_autocorrelations[i], linewidth=0.5, color=cmap(i))
+
+    normed_length = list(itertools.zip_longest(*angle_autocorrelations, fillvalue=np.nan))
+    mean_autocorrelation = [np.nanmean(i) for i in normed_length]
+    plt.plot(np.linspace(0, 400, 400), mean_autocorrelation[:400], color="black", label="Average")
+    plt.legend()
+
+    plt.xlim(0, 400)
+    plt.minorticks_on()
+    plt.title("Autocorrelation of velocity direction in different executions")
+    plt.xlabel("Lag [frames]")
+    plt.ylabel("Autocorrelation")
+    plt.show()
+
 
 
 if __name__ == "__main__":
@@ -233,5 +316,9 @@ if __name__ == "__main__":
 
     # Load trajectories directly and analyze
     tr = analyze_velocity()
-    plot_velocity_hist(tr)
-    # plot_velocity_heamap(tr)
+    # plot_velocity_hist(tr)
+    # plot_velocity_heatmap(tr)
+    # plot_velocity_direction(tr)
+    velocity_autocorrelation(tr)
+
+
