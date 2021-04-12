@@ -83,7 +83,8 @@ def show_centers(frame, centers, sleep_time=0.0):
 
 
 def main():
-    cap = cv2.VideoCapture(r"C:\Users\OmerChor\OneDrive - mail.tau.ac.il\University\Physics\Info_machines\project\1.mp4")
+    # cap = cv2.VideoCapture(r"C:\Users\OmerChor\OneDrive - mail.tau.ac.il\University\Physics\Info_machines\project\1.mp4")
+    cap = cv2.VideoCapture(r"C:\Users\OmerChor\Pictures\Camera Roll\vid_1080p.mp4")
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(frame_count)
     ret = True
@@ -96,23 +97,25 @@ def main():
                 # ret, frame = cap.read(1)
                 ret, frame = cap.read()
                 if ret:
+                    # Cut edges (outside arena)
+                    frame = frame[100:900,300:1500]
                     frame_num += 1
                     pbar.update(1)
                     centers = detect_stickers(frame,
-                                              hsv_min=(30, 35, 0),
-                                              hsv_max=(90, 255, 255)
+                                              hsv_min=(90, 150, 150),
+                                              hsv_max=(120, 255, 255)
                                               )
                     if len(centers) == 0:
                         # print(f"Nothing found in frame #{frame_num}")
                         # cv2.imshow("output", frame)
                         # if cv2.waitKey(1) & 0xFF == ord('q'):
                         #     ret = False
-                        # time.sleep(1)
+                        # time.sleep(0.01)
                         continue
                     frames.append(centers_dataframe(centers, frame_num))
-                    # show_centers(frame, centers, 0.01)
-                    # if cv2.waitKey(1) & 0xFF == ord('q'):
-                    #     ret = False
+                    # show_centers(frame, centers)#, 0.01)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        ret = False
     finally:
         cap.release()
         cv2.destroyAllWindows()
@@ -155,6 +158,17 @@ def analyze_velocity():
 
         # Velocity exactly 0 probably due to lag in video (?)
         sub = sub[sub['velocity'] != 0]
+        if len(sub) == 0:
+            continue
+
+        # # Where frames with velocity=0 were removed (due to lag in video), cut velocity by half because the distance
+        # # was travelled during two frames, not one
+        # sub.set_index("frame", drop=False, inplace=True)
+        # prev = sub.index.values[0]
+        # for j in sub.index.values[1:]:
+        #     if j - prev > 1:
+        #         sub.at[j, "velocity"] /= (j - prev)
+        #     prev = j
 
         subs.append(sub)
 
@@ -167,13 +181,15 @@ def plot_velocity_hist(trajectories=None):
     if trajectories is None:
         trajectories = pandas.read_pickle("trajectories_with_velocity")
 
-    plt.hist(trajectories.velocity, bins=200)
+    h = plt.hist(trajectories.velocity, bins=200)
     plt.xlabel("Velocity (pixels / frame)")
     plt.ylabel("Count")
     plt.title("Velocities distribution")
     plt.ylim(0, 4000)
     plt.xlim(0, 40)
     plt.show()
+
+    return h
 
 
 def average_velocity(trajectories=None):
@@ -197,7 +213,7 @@ def average_velocity(trajectories=None):
     y1 = yy[~heatmap.mask]
     newarr = heatmap[~heatmap.mask]
 
-    return griddata((x1, y1), newarr.ravel(), (xx, yy), method='nearest')
+    return griddata((x1, y1), newarr.ravel(), (xx, yy))
 
 
     # xmin = trajectories.x.min()
@@ -226,6 +242,7 @@ def plot_velocity_heatmap(trajectories=None):
     cbar.set_label("velocity [px/s]")
     plt.title("Mean velocity as function of position\n(interpolated)")
     plt.tight_layout()
+    plt.minorticks_on()
     plt.show()
 
 
@@ -267,14 +284,14 @@ def velocity_autocorrelation(trajectories):
     cmap = plt.cm.get_cmap("hsv", len(set(trajectories["particle"])) + 1)
     for i, particle in enumerate(set(trajectories["particle"])):
         current_frames = trajectories[trajectories.particle == particle]
-        plt.plot(current_frames.frame - current_frames.frame.min(), current_frames.velocity, ".", color=cmap(i))
-
-    plt.ylim(0, 35)
-    plt.xlim(0, 100)
+        plt.plot(current_frames.frame, current_frames.velocity, ".", markersize=1, color=cmap(i))
+    plt.ylim(top=35)
+    plt.xlim(0)
     plt.title("Velocity as function of time")
     plt.ylabel("Velocity [px/s]")
     plt.xlabel("Time [frame]")
     plt.show()
+
 
     # Plot velocity autocorrelations
     for i in range(len(velocity_lags)):
@@ -292,9 +309,9 @@ def velocity_autocorrelation(trajectories):
         plt.plot(velocity_lags[i], angle_autocorrelations[i], linewidth=0.5, color=cmap(i))
 
     normed_length = list(itertools.zip_longest(*angle_autocorrelations, fillvalue=np.nan))
-    mean_autocorrelation = [np.nanmean(i) for i in normed_length]
-    plt.plot(np.linspace(0, 400, 400), mean_autocorrelation[:400], color="black", label="Average")
-    plt.legend()
+    # mean_autocorrelation = [np.nanmean(i) for i in normed_length]
+    # plt.plot(np.linspace(0, 400, 400), mean_autocorrelation[:400], color="black", label="Average")
+    # plt.legend()
 
     plt.xlim(0, 400)
     plt.minorticks_on()
@@ -304,11 +321,43 @@ def velocity_autocorrelation(trajectories):
     plt.show()
 
 
+def velocity_by_region(trajectories):
+    xmin = trajectories.x.min()
+    ymin = trajectories.y.min()
+    # margins_rule = (trajectories.x - xmin < 30) | (trajectories.x - xmin > 220) | (trajectories.y - ymin < 40) | (trajectories.y - ymin > 270)
+    margins_rule = (trajectories.x - xmin < 40) | (trajectories.x - xmin > 240) | (trajectories.y - ymin < 50) | (trajectories.y - ymin > 260)
+    velocities_out = trajectories[margins_rule].velocity
+    velocities_in = trajectories[~margins_rule].velocity
+
+    fig, ax = plt.subplots(2, sharex=True)
+
+    n, bins, patches = ax[0].hist(velocities_out, bins=200)
+    ax[0].set_ylabel("Count")
+    ax[0].set_title("Velocities near edges")
+    ax[0].set_xlim(0, 40)
+
+    df2 = pandas.DataFrame({'count': n, 'bins': bins[:-1]})
+    df2.to_excel("edges_velocities.xlsx", sheet_name='sheet1', index=False)
+
+
+    ax[1].hist(velocities_in, bins=200)
+    ax[1].set_xlabel("Velocity (pixels / frame)")
+    ax[1].set_ylabel("Count")
+    ax[1].set_title("Velocities inside")
+    ax[1].set_xlim(0, 40)
+
+    df2 = pandas.DataFrame({'count': n, 'bins': bins[:-1]})
+    df2.to_excel("inside_velocities.xlsx", sheet_name='sheet1', index=False)
+
+
+    plt.tight_layout()
+    plt.show()
+
 
 if __name__ == "__main__":
     trackpy.enable_numba()
     # Analyze
-    # main()
+    main()
 
     # Load previous analysis
     # tr = load()
@@ -316,9 +365,10 @@ if __name__ == "__main__":
 
     # Load trajectories directly and analyze
     tr = analyze_velocity()
-    # plot_velocity_hist(tr)
+    plot_velocity_hist(tr)
     # plot_velocity_heatmap(tr)
     # plot_velocity_direction(tr)
     velocity_autocorrelation(tr)
+    velocity_by_region(tr)
 
 
