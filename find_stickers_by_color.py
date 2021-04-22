@@ -41,6 +41,7 @@ def detect_stickers(frame, hsv_min=(40, 50, 0), hsv_max=(85, 255, 255)):
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     moments = [cv2.moments(cnt) for cnt in contours]
     centers = [(int(m['m10'] / m['m00']), int(m['m01'] / m['m00'])) for m in moments]
+
     return centers
 
 
@@ -123,7 +124,7 @@ def main():
     np.save("frames", np.asarray(frames))
 
     # predictor = trackpy.predict.NearestVelocityPredict()
-    tr = pandas.concat(trackpy.link_df_iter(frames, 20, memory=0,
+    tr = pandas.concat(trackpy.link_df_iter(frames, 40, memory=1,
                                             pos_columns=['y', 'x'],
                                             t_column='frame'))
     trackpy.plot_traj(tr, label=True, superimpose=frame)
@@ -157,9 +158,9 @@ def analyze_velocity():
         sub['velocity'] = np.hypot(dvx, dvy)
 
         # Velocity exactly 0 probably due to lag in video (?)
-        sub = sub[sub['velocity'] != 0]
-        if len(sub) == 0:
-            continue
+        # sub = sub[sub['velocity'] != 0]
+        # if len(sub) == 0:
+        #     continue
 
         # # Where frames with velocity=0 were removed (due to lag in video), cut velocity by half because the distance
         # # was travelled during two frames, not one
@@ -186,7 +187,7 @@ def plot_velocity_hist(trajectories=None):
     plt.ylabel("Count")
     plt.title("Velocities distribution")
     plt.ylim(0, 4000)
-    plt.xlim(0, 40)
+    # plt.xlim(0, 40)
     plt.show()
 
     return h
@@ -285,7 +286,7 @@ def velocity_autocorrelation(trajectories):
     for i, particle in enumerate(set(trajectories["particle"])):
         current_frames = trajectories[trajectories.particle == particle]
         plt.plot(current_frames.frame, current_frames.velocity, ".", markersize=1, color=cmap(i))
-    plt.ylim(top=35)
+    # plt.ylim(top=35)
     plt.xlim(0)
     plt.title("Velocity as function of time")
     plt.ylabel("Velocity [px/s]")
@@ -325,7 +326,7 @@ def velocity_by_region(trajectories):
     xmin = trajectories.x.min()
     ymin = trajectories.y.min()
     # margins_rule = (trajectories.x - xmin < 30) | (trajectories.x - xmin > 220) | (trajectories.y - ymin < 40) | (trajectories.y - ymin > 270)
-    margins_rule = (trajectories.x - xmin < 40) | (trajectories.x - xmin > 240) | (trajectories.y - ymin < 50) | (trajectories.y - ymin > 260)
+    margins_rule = (trajectories.x - xmin < 100) | (trajectories.x - xmin > 1000) | (trajectories.y - ymin < 40) | (trajectories.y - ymin > 640)
     velocities_out = trajectories[margins_rule].velocity
     velocities_in = trajectories[~margins_rule].velocity
 
@@ -363,12 +364,20 @@ if __name__ == "__main__":
     # tr = load()
     # trackpy.plot_traj(tr, label=True)
 
+    # tr = pandas.read_pickle("trajectories")
+    # particles = set(tr.particle)
+    # for p in particles:
+    #     current = tr[tr.particle == p]
+    #     plt.plot(current.x, current.y)
+    # plt.show()
+
+
     # Load trajectories directly and analyze
-    tr = analyze_velocity()
-    plot_velocity_hist(tr)
+    # tr = analyze_velocity()
+    # plot_velocity_hist(tr)
     # plot_velocity_heatmap(tr)
-    # plot_velocity_direction(tr)
-    velocity_autocorrelation(tr)
-    velocity_by_region(tr)
+    # # plot_velocity_direction(tr)
+    # velocity_autocorrelation(tr)
+    # velocity_by_region(tr)
 
 
