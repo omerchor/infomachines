@@ -1,5 +1,8 @@
 import time
 
+import pandas
+import scipy.integrate
+from scipy.fft import fft, fftfreq
 import serial
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,7 +10,7 @@ import matplotlib.pyplot as plt
 CURRENT_READING = b"?C\r\n"
 AUTO_TRANSMIT = b"AOUT250\r\n"
 TIME_RESOLUTION = 250
-BUFFER_SIZE = 1024
+BUFFER_SIZE = 1024 * 16
 
 
 def read_current(ser):
@@ -41,7 +44,7 @@ def read_current(ser):
         return times, results
 
 
-def read_auto(ser):
+def read_auto(ser, record_time=5):
     # Transmission with units
     # ser.write(b"FULL\r\n")
     # ser.flush()
@@ -51,25 +54,31 @@ def read_auto(ser):
 
     # Auto transmit reading
     ser.write(AUTO_TRANSMIT)
+    # ser.write(CURRENT_READING)
     ser.flush()
-    # Wait for some data to accumulate
-    time.sleep(1)
+
     raw_results = bytearray()
+    times = []
+    results = []
+    t = time.time()
+
     try:
-        while True:
-            current_buffer = ser.read(BUFFER_SIZE)
-            print(f"Read {len(current_buffer)} bytes...")
-            raw_results += current_buffer
+        # Ignore first reading, it tends to be problematic
+        ser.readline()
+        while time.time() - t < record_time:
+            # current_buffer = ser.read(BUFFER_SIZE)
+            # print(f"Read {len(current_buffer)} bytes...")
+            # raw_results += current_buffer
+
+            value = ser.readline()
+            try:
+                result = float(value)
+                results.append(result)
+                times.append(time.time() - t)
+            except ValueError:
+                continue
     except KeyboardInterrupt:
         pass
-
-    results = []
-    for value in raw_results.split():
-        try:
-            results.append(float(value))
-        except ValueError:
-            continue
-    times = np.arange(0, len(results) / TIME_RESOLUTION, 1/TIME_RESOLUTION)
     return times, results
 
 
@@ -82,12 +91,46 @@ def main():
         ser.write(b"N\r\n")
         ser.flush()
         # times, results = read_current(ser)
-        times, results = read_auto(ser)
+        times, results = read_auto(ser, 60*5)
+
+        fourier = fft(results)
+        freq = fftfreq(len(results), d=1/TIME_RESOLUTION)
+        plt.plot(freq, fourier)
+        plt.xlim(0)
+        plt.title("Fourier Transform of Force")
+        plt.xlabel("Frequency [Hz]")
+        plt.show()
+
+        results = np.array(results)
+        times = np.array(times)
+        positive_indices = np.where(results >= 0)
+        results = results[positive_indices]
+        times = times[positive_indices]
+
+        df = pandas.DataFrame(zip(times, results), columns=["Time", "Results"])
+        name = "7_2"
+        df.to_csv(f"forces\\{name}.csv")
+
         plt.plot(times, results)
         plt.xlabel("Time [sec]")
         plt.ylabel("Force [N]")
-        plt.xlim(1,2)
+        plt.title("Force of Hexbug vs. Wall")
+        plt.savefig(f"forces\\force_{name}_cm.png")
         plt.show()
+
+        area = scipy.integrate.trapz(results, times)
+        average = area / times[-1] - times[0]
+        print(f"Area is: {area:.3f} [N*s]")
+        print(f"Average force is {average:.3f} [N]")
+
+        plt.hist(results, density=True, bins=100)
+        plt.vlines(average, 0, 1, colors="black")
+        plt.xlabel("Force [N]")
+        plt.title("Forces distribution")
+        plt.savefig(f"forces\\dist_{name}_cm.png")
+        plt.show()
+
+        print(average, np.mean(results))
 
 
 if __name__ == "__main__":
