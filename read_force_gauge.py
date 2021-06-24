@@ -108,7 +108,7 @@ def main():
         times = times[positive_indices]
 
         df = pandas.DataFrame(zip(times, results), columns=["Time", "Results"])
-        name = "7_2"
+        name = "18_2"
         df.to_csv(f"forces\\{name}.csv")
 
         plt.plot(times, results)
